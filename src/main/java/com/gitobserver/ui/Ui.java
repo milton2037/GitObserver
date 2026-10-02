@@ -1,5 +1,6 @@
 package com.gitobserver.ui;
 
+import com.gitobserver.GitObserverApp;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.control.Alert;
@@ -90,6 +91,7 @@ public final class Ui {
         alert.setHeaderText(title);
         alert.setContentText(message);
         alert.getDialogPane().setMinWidth(420);
+        applyStyles(alert.getDialogPane());
         if (owner != null) {
             alert.initOwner(owner);
         }
@@ -102,6 +104,7 @@ public final class Ui {
         alert.setHeaderText(title);
         alert.setContentText(message);
         alert.getDialogPane().setMinWidth(460);
+        applyStyles(alert.getDialogPane());
         if (owner != null) {
             alert.initOwner(owner);
         }
@@ -133,6 +136,13 @@ public final class Ui {
     }
 
     public static Insets pagePadding() {
-        return new Insets(4, 20, 20, 20);
+        return new Insets(8, 22, 22, 22);
+    }
+
+    private static void applyStyles(javafx.scene.control.DialogPane pane) {
+        var stylesheet = GitObserverApp.class.getResource(GitObserverApp.STYLESHEET);
+        if (stylesheet != null) {
+            pane.getStylesheets().add(stylesheet.toExternalForm());
+        }
     }
 }

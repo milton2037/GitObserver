@@ -125,7 +125,7 @@ public final class DashboardView {
         Label label = Ui.muted(caption);
         value.getStyleClass().add("card-value");
         VBox card = new VBox(4, label, value);
-        card.getStyleClass().add("card");
+        card.getStyleClass().addAll("card", "stat-card");
         card.setMinWidth(180);
         HBox.setHgrow(card, Priority.ALWAYS);
         card.setMaxWidth(Double.MAX_VALUE);

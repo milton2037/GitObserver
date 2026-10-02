@@ -1,11 +1,15 @@
 package com.gitobserver.github;
 
 import com.gitobserver.model.AuthorCount;
+import com.gitobserver.model.BucketCount;
 import com.gitobserver.model.CommitRecord;
 import com.gitobserver.model.ContributorRef;
 import com.gitobserver.model.PersonContribution;
+import com.gitobserver.model.RepoActivity;
 import com.gitobserver.model.RepoContribution;
 
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -95,6 +99,62 @@ public final class StatsAggregator {
         return counts.entrySet().stream()
                 .map(entry -> new AuthorCount(entry.getKey(), entry.getValue()))
                 .sorted(Comparator.comparingInt(AuthorCount::commits).reversed().thenComparing(AuthorCount::author))
+                .toList();
+    }
+
+    public static List<BucketCount> commitsByDay(List<CommitRecord> commits, ZoneId zone) {
+        Map<String, Integer> counts = new HashMap<>();
+        DateTimeFormatter format = DateTimeFormatter.ISO_LOCAL_DATE;
+        for (CommitRecord commit : commits) {
+            if (commit.committedAt() == null) {
+                continue;
+            }
+            String day = format.format(commit.committedAt().atZone(zone));
+            counts.merge(day, 1, Integer::sum);
+        }
+        return counts.entrySet().stream()
+                .map(entry -> new BucketCount(entry.getKey(), entry.getValue()))
+                .sorted(Comparator.comparing(BucketCount::label))
+                .toList();
+    }
+
+    public static List<BucketCount> commitsByHour(List<CommitRecord> commits, ZoneId zone) {
+        Map<Integer, Integer> counts = new HashMap<>();
+        for (CommitRecord commit : commits) {
+            if (commit.committedAt() == null) {
+                continue;
+            }
+            int hour = commit.committedAt().atZone(zone).getHour();
+            counts.merge(hour, 1, Integer::sum);
+        }
+        return counts.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> new BucketCount(String.format("%02d:00", entry.getKey()), entry.getValue()))
+                .toList();
+    }
+
+    public static String peakHour(List<CommitRecord> commits, ZoneId zone) {
+        return commitsByHour(commits, zone).stream()
+                .max(Comparator.comparingInt(BucketCount::commits).thenComparing(Comparator.comparing(BucketCount::label).reversed()))
+                .map(BucketCount::label)
+                .orElse("—");
+    }
+
+    public static List<RepoActivity> commitsByRepository(List<CommitRecord> commits) {
+        Map<String, List<CommitRecord>> byRepo = new LinkedHashMap<>();
+        for (CommitRecord commit : commits) {
+            String repository = commit.repository() == null || commit.repository().isBlank()
+                    ? "Desconocido"
+                    : commit.repository();
+            byRepo.computeIfAbsent(repository, key -> new ArrayList<>()).add(commit);
+        }
+        return byRepo.entrySet().stream()
+                .map(entry -> new RepoActivity(
+                        entry.getKey(),
+                        entry.getValue().size(),
+                        (int) entry.getValue().stream().map(CommitRecord::author).distinct().count()
+                ))
+                .sorted(Comparator.comparingInt(RepoActivity::commits).reversed().thenComparing(RepoActivity::repository))
                 .toList();
     }
 }

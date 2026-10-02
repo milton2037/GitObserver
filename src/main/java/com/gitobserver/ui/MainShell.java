@@ -26,6 +26,7 @@ public final class MainShell implements Navigator {
     private final Label pageSubtitle = new Label();
     private final ComboBox<Account> accounts = new ComboBox<>();
     private final DashboardView dashboard;
+    private final StatisticsView statistics;
     private final ContributorsView contributors;
     private final ActivityView activity;
     private final SettingsView settings;
@@ -34,6 +35,7 @@ public final class MainShell implements Navigator {
     public MainShell(AppContext context) {
         this.context = context;
         this.dashboard = new DashboardView(context, this);
+        this.statistics = new StatisticsView(context);
         this.contributors = new ContributorsView(context);
         this.activity = new ActivityView(context);
         this.settings = new SettingsView(context);
@@ -41,6 +43,7 @@ public final class MainShell implements Navigator {
         buildHeader();
         buildStatusBar();
         register(Pages.HOME, dashboard.root());
+        register(Pages.STATISTICS, statistics.root());
         register(Pages.CONTRIBUTIONS, contributors.root());
         register(Pages.ACTIVITY, activity.root());
         register(Pages.SETTINGS, settings.root());
@@ -73,6 +76,7 @@ public final class MainShell implements Navigator {
         }
         switch (pageId) {
             case Pages.HOME -> dashboard.onShow();
+            case Pages.STATISTICS -> statistics.onShow();
             case Pages.CONTRIBUTIONS -> contributors.onShow();
             case Pages.ACTIVITY -> activity.onShow();
             default -> {
@@ -83,10 +87,17 @@ public final class MainShell implements Navigator {
     private void buildSidebar() {
         Label brand = new Label("GitObserver");
         brand.getStyleClass().add("brand");
+        Region mark = new Region();
+        mark.getStyleClass().add("brand-mark");
+        mark.setMinSize(12, 12);
+        mark.setPrefSize(12, 12);
+        mark.setMaxSize(12, 12);
+        HBox brandRow = new HBox(mark, brand);
+        brandRow.getStyleClass().add("brand-row");
         Label subtitle = new Label("Monitor de GitHub");
         subtitle.getStyleClass().add("brand-sub");
-        VBox header = new VBox(2, brand, subtitle);
-        header.setPadding(new Insets(0, 8, 8, 8));
+        VBox header = new VBox(4, brandRow, subtitle);
+        header.setPadding(new Insets(4, 8, 12, 8));
 
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
@@ -98,6 +109,7 @@ public final class MainShell implements Navigator {
                 header,
                 new Separator(),
                 navButton("Inicio", Pages.HOME),
+                navButton("Estadísticas", Pages.STATISTICS),
                 navButton("Contribuciones", Pages.CONTRIBUTIONS),
                 navButton("Actividad", Pages.ACTIVITY),
                 navButton("Configuración", Pages.SETTINGS),
@@ -105,8 +117,8 @@ public final class MainShell implements Navigator {
                 version
         );
         sidebar.getStyleClass().add("sidebar");
-        sidebar.setPrefWidth(232);
-        sidebar.setMinWidth(232);
+        sidebar.setPrefWidth(236);
+        sidebar.setMinWidth(236);
         root.setLeft(sidebar);
     }
 
@@ -170,12 +182,12 @@ public final class MainShell implements Navigator {
         });
 
         Label accountLabel = new Label("Cuenta");
-        accountLabel.getStyleClass().add("muted");
+        accountLabel.getStyleClass().add("field-label");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox header = new HBox(12, titles, spacer, accountLabel, accounts);
+        HBox header = new HBox(titles, spacer, accountLabel, accounts);
         header.setAlignment(Pos.CENTER_LEFT);
-        header.setPadding(new Insets(18, 20, 10, 20));
+        header.getStyleClass().add("top-bar");
         root.setTop(header);
     }
 
@@ -207,6 +219,7 @@ public final class MainShell implements Navigator {
 
     private static String titleOf(String pageId) {
         return switch (pageId) {
+            case Pages.STATISTICS -> "Estadísticas";
             case Pages.CONTRIBUTIONS -> "Contribuciones";
             case Pages.ACTIVITY -> "Actividad";
             case Pages.SETTINGS -> "Configuración";
@@ -216,6 +229,7 @@ public final class MainShell implements Navigator {
 
     private static String subtitleOf(String pageId) {
         return switch (pageId) {
+            case Pages.STATISTICS -> "Parámetros del periodo y resumen de commits, colaboradores y horarios.";
             case Pages.CONTRIBUTIONS -> "Commits, líneas y archivos que cambió cada colaborador.";
             case Pages.ACTIVITY -> "Quién subió cambios en una fecha y hora, con archivos y diff.";
             case Pages.SETTINGS -> "Tokens de acceso para una o varias cuentas de GitHub.";
