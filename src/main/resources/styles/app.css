@@ -1,0 +1,188 @@
+.app-root {
+    -fx-background-color: #f1f5f9;
+    -fx-font-family: "Segoe UI", "SansSerif";
+    -fx-font-size: 13px;
+}
+
+.sidebar {
+    -fx-background-color: #0f172a;
+    -fx-padding: 18 12 16 12;
+}
+
+.sidebar .separator .line {
+    -fx-border-color: #334155;
+}
+
+.brand {
+    -fx-text-fill: white;
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+}
+
+.brand-sub {
+    -fx-text-fill: #94a3b8;
+    -fx-font-size: 12px;
+}
+
+.nav-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #cbd5e1;
+    -fx-alignment: center-left;
+    -fx-padding: 10 14;
+    -fx-background-radius: 8;
+    -fx-cursor: hand;
+    -fx-font-size: 13px;
+}
+
+.nav-button:hover {
+    -fx-background-color: #1e293b;
+}
+
+.nav-button.active {
+    -fx-background-color: #4f46e5;
+    -fx-text-fill: white;
+}
+
+.button {
+    -fx-background-radius: 8;
+    -fx-cursor: hand;
+    -fx-padding: 8 14;
+}
+
+.button.primary {
+    -fx-background-color: #4f46e5;
+    -fx-text-fill: white;
+}
+
+.button.primary:hover {
+    -fx-background-color: #4338ca;
+}
+
+.button.secondary {
+    -fx-background-color: white;
+    -fx-text-fill: #0f172a;
+    -fx-border-color: #cbd5e1;
+    -fx-border-radius: 8;
+}
+
+.button.danger {
+    -fx-background-color: #fff1f2;
+    -fx-text-fill: #be123c;
+    -fx-border-color: #fecdd3;
+    -fx-border-radius: 8;
+}
+
+.button:disabled {
+    -fx-opacity: 0.55;
+}
+
+.title {
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #0f172a;
+}
+
+.section-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #0f172a;
+}
+
+.field-label {
+    -fx-font-weight: bold;
+    -fx-text-fill: #334155;
+}
+
+.muted {
+    -fx-text-fill: #64748b;
+}
+
+.status-ok {
+    -fx-text-fill: #047857;
+}
+
+.status-error {
+    -fx-text-fill: #be123c;
+}
+
+.card {
+    -fx-background-color: white;
+    -fx-background-radius: 12;
+    -fx-padding: 16;
+    -fx-effect: dropshadow(gaussian, rgba(15, 23, 42, 0.08), 18, 0, 0, 4);
+}
+
+.card-value {
+    -fx-font-size: 28px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #0f172a;
+}
+
+.status-bar {
+    -fx-background-color: white;
+    -fx-border-color: #e2e8f0 transparent transparent transparent;
+    -fx-padding: 8 16;
+}
+
+.badge-private, .badge-public {
+    -fx-background-radius: 999;
+    -fx-padding: 2 8;
+    -fx-font-size: 11px;
+}
+
+.badge-private {
+    -fx-background-color: #fef3c7;
+    -fx-text-fill: #92400e;
+}
+
+.badge-public {
+    -fx-background-color: #dcfce7;
+    -fx-text-fill: #166534;
+}
+
+.bar {
+    -fx-background-color: #4f46e5;
+    -fx-background-radius: 4;
+}
+
+.patch-view {
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-control-inner-background: #0f172a;
+    -fx-text-fill: #e2e8f0;
+    -fx-prompt-text-fill: #94a3b8;
+}
+
+.patch-view .content {
+    -fx-background-color: #0f172a;
+}
+
+.patch-preview {
+    -fx-cursor: hand;
+}
+
+.mono {
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+    -fx-text-fill: #334155;
+}
+
+.table-view {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.table-view .column-header-background {
+    -fx-background-color: #f8fafc;
+}
+
+.table-row-cell:hover {
+    -fx-background-color: #eef2ff;
+}
+
+.table-row-cell:selected {
+    -fx-background-color: #e0e7ff;
+}
+
+.table-row-cell:selected .text {
+    -fx-fill: #0f172a;
+}

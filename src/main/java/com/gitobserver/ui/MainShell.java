@@ -1,0 +1,225 @@
+package com.gitobserver.ui;
+
+import com.gitobserver.AppContext;
+import com.gitobserver.model.Account;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
+import javafx.scene.Parent;
+import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Label;
+import javafx.scene.control.Separator;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
+import javafx.util.StringConverter;
+
+public final class MainShell implements Navigator {
+    private final AppContext context;
+    private final BorderPane root = new BorderPane();
+    private final StackPane stack = new StackPane();
+    private final Label pageTitle = new Label("Inicio");
+    private final Label pageSubtitle = new Label();
+    private final ComboBox<Account> accounts = new ComboBox<>();
+    private final DashboardView dashboard;
+    private final ContributorsView contributors;
+    private final ActivityView activity;
+    private final SettingsView settings;
+    private boolean updatingCombo;
+
+    public MainShell(AppContext context) {
+        this.context = context;
+        this.dashboard = new DashboardView(context, this);
+        this.contributors = new ContributorsView(context);
+        this.activity = new ActivityView(context);
+        this.settings = new SettingsView(context);
+        buildSidebar();
+        buildHeader();
+        buildStatusBar();
+        register(Pages.HOME, dashboard.root());
+        register(Pages.CONTRIBUTIONS, contributors.root());
+        register(Pages.ACTIVITY, activity.root());
+        register(Pages.SETTINGS, settings.root());
+        root.setCenter(stack);
+        root.getStyleClass().add("app-root");
+        showPage(Pages.HOME);
+    }
+
+    public Parent root() {
+        return root;
+    }
+
+    @Override
+    public void showPage(String pageId) {
+        for (Node node : stack.getChildren()) {
+            boolean active = pageId.equals(node.getUserData());
+            node.setVisible(active);
+            node.setManaged(active);
+            node.setMouseTransparent(!active);
+        }
+        pageTitle.setText(titleOf(pageId));
+        pageSubtitle.setText(subtitleOf(pageId));
+        for (Node node : ((VBox) root.getLeft()).getChildren()) {
+            if (node instanceof Button button) {
+                button.getStyleClass().remove("active");
+                if (pageId.equals(button.getUserData())) {
+                    button.getStyleClass().add("active");
+                }
+            }
+        }
+        switch (pageId) {
+            case Pages.HOME -> dashboard.onShow();
+            case Pages.CONTRIBUTIONS -> contributors.onShow();
+            case Pages.ACTIVITY -> activity.onShow();
+            default -> {
+            }
+        }
+    }
+
+    private void buildSidebar() {
+        Label brand = new Label("GitObserver");
+        brand.getStyleClass().add("brand");
+        Label subtitle = new Label("Monitor de GitHub");
+        subtitle.getStyleClass().add("brand-sub");
+        VBox header = new VBox(2, brand, subtitle);
+        header.setPadding(new Insets(0, 8, 8, 8));
+
+        Region spacer = new Region();
+        VBox.setVgrow(spacer, Priority.ALWAYS);
+        Label version = new Label("Versión 0.1.0");
+        version.getStyleClass().add("brand-sub");
+        version.setPadding(new Insets(8, 8, 0, 8));
+
+        VBox sidebar = new VBox(6,
+                header,
+                new Separator(),
+                navButton("Inicio", Pages.HOME),
+                navButton("Contribuciones", Pages.CONTRIBUTIONS),
+                navButton("Actividad", Pages.ACTIVITY),
+                navButton("Configuración", Pages.SETTINGS),
+                spacer,
+                version
+        );
+        sidebar.getStyleClass().add("sidebar");
+        sidebar.setPrefWidth(232);
+        sidebar.setMinWidth(232);
+        root.setLeft(sidebar);
+    }
+
+    private Button navButton(String text, String pageId) {
+        Button button = new Button(text);
+        button.setUserData(pageId);
+        button.getStyleClass().add("nav-button");
+        button.setMaxWidth(Double.MAX_VALUE);
+        button.setAlignment(Pos.CENTER_LEFT);
+        button.setOnAction(event -> showPage(pageId));
+        return button;
+    }
+
+    private void buildHeader() {
+        pageTitle.getStyleClass().add("title");
+        pageSubtitle.getStyleClass().add("muted");
+        VBox titles = new VBox(2, pageTitle, pageSubtitle);
+
+        accounts.setItems(context.accounts());
+        accounts.setPrefWidth(260);
+        accounts.setPromptText("Sin cuentas");
+        accounts.setConverter(new StringConverter<>() {
+            @Override
+            public String toString(Account account) {
+                return account == null ? "" : account.label();
+            }
+
+            @Override
+            public Account fromString(String value) {
+                return null;
+            }
+        });
+        updatingCombo = true;
+        accounts.setValue(context.activeAccount());
+        updatingCombo = false;
+        accounts.valueProperty().addListener((obs, oldValue, newValue) -> {
+            if (updatingCombo) {
+                return;
+            }
+            if (newValue == null) {
+                Account active = context.activeAccount();
+                if (active != null && context.accounts().contains(active)) {
+                    javafx.application.Platform.runLater(() -> {
+                        updatingCombo = true;
+                        accounts.setValue(active);
+                        updatingCombo = false;
+                    });
+                }
+                return;
+            }
+            if (newValue != context.activeAccount()) {
+                context.setActiveAccount(newValue);
+            }
+        });
+        context.activeAccountProperty().addListener((obs, oldValue, newValue) -> {
+            if (accounts.getValue() != newValue) {
+                updatingCombo = true;
+                accounts.setValue(newValue);
+                updatingCombo = false;
+            }
+        });
+
+        Label accountLabel = new Label("Cuenta");
+        accountLabel.getStyleClass().add("muted");
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox header = new HBox(12, titles, spacer, accountLabel, accounts);
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.setPadding(new Insets(18, 20, 10, 20));
+        root.setTop(header);
+    }
+
+    private void buildStatusBar() {
+        Label status = new Label();
+        status.textProperty().bind(context.statusProperty());
+        status.getStyleClass().add("muted");
+        Label rate = new Label();
+        rate.textProperty().bind(context.rateLimitProperty());
+        rate.getStyleClass().add("muted");
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox bar = new HBox(12, status, spacer, rate);
+        bar.setAlignment(Pos.CENTER_LEFT);
+        bar.getStyleClass().add("status-bar");
+        root.setBottom(bar);
+    }
+
+    private void register(String pageId, Node node) {
+        node.setUserData(pageId);
+        node.setVisible(false);
+        node.setManaged(false);
+        node.setMouseTransparent(true);
+        if (node instanceof Region region) {
+            region.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+        }
+        stack.getChildren().add(node);
+    }
+
+    private static String titleOf(String pageId) {
+        return switch (pageId) {
+            case Pages.CONTRIBUTIONS -> "Contribuciones";
+            case Pages.ACTIVITY -> "Actividad";
+            case Pages.SETTINGS -> "Configuración";
+            default -> "Inicio";
+        };
+    }
+
+    private static String subtitleOf(String pageId) {
+        return switch (pageId) {
+            case Pages.CONTRIBUTIONS -> "Commits, líneas y archivos que cambió cada colaborador.";
+            case Pages.ACTIVITY -> "Quién subió cambios en una fecha y hora, con archivos y diff.";
+            case Pages.SETTINGS -> "Tokens de acceso para una o varias cuentas de GitHub.";
+            default -> "Repositorios que la cuenta activa puede ver.";
+        };
+    }
+}
