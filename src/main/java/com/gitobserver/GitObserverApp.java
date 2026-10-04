@@ -11,10 +11,6 @@ import javafx.stage.Stage;
 public final class GitObserverApp extends Application {
     public static final String STYLESHEET = "/styles/app.css";
 
-    public static void main(String[] args) {
-        launch(args);
-    }
-
     @Override
     public void start(Stage stage) {
         ConfigStore store = new ConfigStore();

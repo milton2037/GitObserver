@@ -5,6 +5,7 @@ public final class Pages {
     public static final String STATISTICS = "statistics";
     public static final String CONTRIBUTIONS = "contributions";
     public static final String ACTIVITY = "activity";
+    public static final String FOLLOW_UP = "follow-up";
     public static final String SETTINGS = "settings";
 
     private Pages() {

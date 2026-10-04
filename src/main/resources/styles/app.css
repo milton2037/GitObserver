@@ -208,6 +208,11 @@
     -fx-text-fill: #166534;
 }
 
+.badge-closed {
+    -fx-background-color: #e2e8f0;
+    -fx-text-fill: #475569;
+}
+
 .bar {
     -fx-background-color: #6366f1;
     -fx-background-radius: 4;
@@ -525,4 +530,62 @@
 
 .dialog-pane .content.label {
     -fx-text-fill: #334155;
+}
+
+.note-view,
+.composer {
+    -fx-background-color: white;
+    -fx-control-inner-background: white;
+    -fx-background-radius: 9;
+    -fx-border-color: #d6dee8;
+    -fx-border-radius: 9;
+    -fx-font-family: "Segoe UI", "SansSerif";
+    -fx-font-size: 13px;
+}
+
+.note-view .content,
+.composer .content {
+    -fx-background-color: white;
+    -fx-background-radius: 8;
+}
+
+.composer:focused,
+.note-view:focused {
+    -fx-border-color: #4f46e5;
+}
+
+.follow-tabs {
+    -fx-background-color: transparent;
+}
+
+.follow-tabs > .tab-header-area {
+    -fx-padding: 0 0 8 0;
+}
+
+.follow-tabs > .tab-header-area > .tab-header-background {
+    -fx-background-color: transparent;
+}
+
+.follow-tabs > .tab-header-area > .headers-region > .tab {
+    -fx-background-color: transparent;
+    -fx-background-radius: 9 9 0 0;
+    -fx-padding: 8 16 8 16;
+    -fx-cursor: hand;
+}
+
+.follow-tabs > .tab-header-area > .headers-region > .tab:selected {
+    -fx-background-color: white;
+}
+
+.follow-tabs > .tab-header-area > .headers-region > .tab .tab-label {
+    -fx-text-fill: #64748b;
+    -fx-font-weight: bold;
+}
+
+.follow-tabs > .tab-header-area > .headers-region > .tab:selected .tab-label {
+    -fx-text-fill: #312e81;
+}
+
+.follow-tabs > .tab-content-area {
+    -fx-background-color: transparent;
 }

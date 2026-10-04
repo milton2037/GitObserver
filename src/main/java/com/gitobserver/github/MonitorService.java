@@ -4,7 +4,11 @@ import com.gitobserver.model.Account;
 import com.gitobserver.model.CommitRecord;
 import com.gitobserver.model.ContributorRef;
 import com.gitobserver.model.FetchReport;
+import com.gitobserver.model.IssueItem;
+import com.gitobserver.model.IssueNote;
+import com.gitobserver.model.PullItem;
 import com.gitobserver.model.RepoRef;
+import com.gitobserver.model.ReviewNote;
 import com.gitobserver.model.TimeRange;
 
 import java.util.ArrayList;
@@ -256,6 +260,183 @@ public final class MonitorService {
             }
         }
         return ready;
+    }
+
+    public FetchReport<IssueItem> loadIssues(
+            List<Account> accounts,
+            String repositoryFullName,
+            String state,
+            BooleanSupplier cancelled,
+            Consumer<String> progress
+    ) {
+        List<IssueItem> issues = Collections.synchronizedList(new ArrayList<>());
+        List<String> errors = Collections.synchronizedList(new ArrayList<>());
+        try {
+            List<RepoTarget> targets = resolve(accounts, repositoryFullName, cancelled, progress, errors);
+            runInParallel(targets, cancelled, progress, errors, "Leyendo issues de ", (target, client) -> {
+                GitHubClient.IssueBatch batch = client.listIssues(
+                        target.accountAlias(),
+                        target.repo().owner(),
+                        target.repo().name(),
+                        state,
+                        cancelled
+                );
+                issues.addAll(batch.issues());
+                if (batch.truncated()) {
+                    errors.add(target.repo().fullName() + ": hay más issues de los que se muestran.");
+                }
+            });
+        } catch (QueryCancelledException ex) {
+            return sortedIssues(issues, errors, true);
+        }
+        return sortedIssues(issues, errors, cancelled.getAsBoolean());
+    }
+
+    public FetchReport<IssueItem> publishIssues(
+            List<Account> accounts,
+            String repositoryFullName,
+            String title,
+            String body,
+            List<String> assignees,
+            BooleanSupplier cancelled,
+            Consumer<String> progress
+    ) {
+        if (title == null || title.isBlank() || body == null || body.isBlank()) {
+            throw new GitHubException(0, "La instrucción necesita un título y un texto para los colaboradores.");
+        }
+        List<IssueItem> created = Collections.synchronizedList(new ArrayList<>());
+        List<String> errors = Collections.synchronizedList(new ArrayList<>());
+        try {
+            List<RepoTarget> targets = resolve(accounts, repositoryFullName, cancelled, progress, errors);
+            if (targets.isEmpty() && errors.isEmpty()) {
+                throw new GitHubException(0, "No hay repositorios en ese alcance.");
+            }
+            runInParallel(targets, cancelled, progress, errors, "Publicando instrucción en ", (target, client) -> {
+                created.add(client.createIssue(
+                        target.accountAlias(),
+                        target.repo().owner(),
+                        target.repo().name(),
+                        title,
+                        body,
+                        assignees,
+                        cancelled
+                ));
+            });
+        } catch (QueryCancelledException ex) {
+            return new FetchReport<>(snapshot(created), snapshot(errors), true);
+        }
+        return new FetchReport<>(snapshot(created), snapshot(errors), cancelled.getAsBoolean());
+    }
+
+    public IssueItem updateIssue(
+            List<Account> accounts,
+            IssueItem issue,
+            String title,
+            String body,
+            List<String> assignees,
+            String state,
+            BooleanSupplier cancelled
+    ) {
+        RepoTarget target = requireTarget(accounts, issue.repository(), cancelled);
+        String[] parts = ownerAndName(issue.repository());
+        return clientFor(target).updateIssue(
+                target.accountAlias(),
+                parts[0],
+                parts[1],
+                issue.number(),
+                title,
+                body,
+                assignees,
+                state,
+                cancelled
+        );
+    }
+
+    public List<IssueNote> loadNotes(List<Account> accounts, IssueItem issue, BooleanSupplier cancelled) {
+        RepoTarget target = requireTarget(accounts, issue.repository(), cancelled);
+        String[] parts = ownerAndName(issue.repository());
+        return clientFor(target).listIssueComments(parts[0], parts[1], issue.number(), cancelled).notes();
+    }
+
+    public IssueNote publishNote(List<Account> accounts, IssueItem issue, String body, BooleanSupplier cancelled) {
+        RepoTarget target = requireTarget(accounts, issue.repository(), cancelled);
+        String[] parts = ownerAndName(issue.repository());
+        return clientFor(target).createIssueComment(parts[0], parts[1], issue.number(), body, cancelled);
+    }
+
+    public FetchReport<PullItem> loadPulls(
+            List<Account> accounts,
+            String repositoryFullName,
+            String state,
+            BooleanSupplier cancelled,
+            Consumer<String> progress
+    ) {
+        List<PullItem> pulls = Collections.synchronizedList(new ArrayList<>());
+        List<String> errors = Collections.synchronizedList(new ArrayList<>());
+        try {
+            List<RepoTarget> targets = resolve(accounts, repositoryFullName, cancelled, progress, errors);
+            runInParallel(targets, cancelled, progress, errors, "Leyendo revisiones de ", (target, client) -> {
+                GitHubClient.PullBatch batch = client.listPulls(
+                        target.accountAlias(),
+                        target.repo().owner(),
+                        target.repo().name(),
+                        state,
+                        cancelled
+                );
+                pulls.addAll(batch.pulls());
+                if (batch.truncated()) {
+                    errors.add(target.repo().fullName() + ": hay más pull requests de los que se muestran.");
+                }
+            });
+        } catch (QueryCancelledException ex) {
+            return sortedPulls(pulls, errors, true);
+        }
+        return sortedPulls(pulls, errors, cancelled.getAsBoolean());
+    }
+
+    public List<ReviewNote> loadReviews(List<Account> accounts, PullItem pull, BooleanSupplier cancelled) {
+        RepoTarget target = requireTarget(accounts, pull.repository(), cancelled);
+        String[] parts = ownerAndName(pull.repository());
+        return clientFor(target).listReviews(parts[0], parts[1], pull.number(), cancelled);
+    }
+
+    public ReviewNote publishReview(List<Account> accounts, PullItem pull, String event, String body, BooleanSupplier cancelled) {
+        RepoTarget target = requireTarget(accounts, pull.repository(), cancelled);
+        String[] parts = ownerAndName(pull.repository());
+        return clientFor(target).createReview(parts[0], parts[1], pull.number(), event, body, cancelled);
+    }
+
+    private RepoTarget requireTarget(List<Account> accounts, String repository, BooleanSupplier cancelled) {
+        List<String> errors = new ArrayList<>();
+        List<RepoTarget> targets = resolve(accounts, repository, cancelled, message -> { }, errors);
+        if (targets.isEmpty()) {
+            throw new GitHubException(0, errors.isEmpty()
+                    ? "No hay un token con acceso a " + repository + "."
+                    : errors.get(0));
+        }
+        return targets.get(0);
+    }
+
+    private static String[] ownerAndName(String fullName) {
+        int slash = fullName == null ? -1 : fullName.indexOf('/');
+        if (slash <= 0 || slash == fullName.length() - 1) {
+            throw new GitHubException(0, "El repositorio no tiene la forma propietario/nombre.");
+        }
+        return new String[] {fullName.substring(0, slash), fullName.substring(slash + 1)};
+    }
+
+    private static FetchReport<IssueItem> sortedIssues(List<IssueItem> issues, List<String> errors, boolean cancelled) {
+        List<IssueItem> sorted = snapshot(issues).stream()
+                .sorted(Comparator.comparing(IssueItem::updatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+        return new FetchReport<>(sorted, snapshot(errors), cancelled);
+    }
+
+    private static FetchReport<PullItem> sortedPulls(List<PullItem> pulls, List<String> errors, boolean cancelled) {
+        List<PullItem> sorted = snapshot(pulls).stream()
+                .sorted(Comparator.comparing(PullItem::updatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+        return new FetchReport<>(sorted, snapshot(errors), cancelled);
     }
 
     private void runInParallel(

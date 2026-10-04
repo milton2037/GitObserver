@@ -44,8 +44,9 @@ public final class SettingsView {
     private void build() {
         Label help = Ui.muted("""
                 Cada token corresponde a una cuenta y solo ve los repositorios a los que esa cuenta tiene acceso.
-                Crea un token personal en GitHub con permiso de lectura del contenido (Contents: Read). \
-                En un token clásico, el alcance repo incluye los repositorios privados.
+                Para commits basta Contents: Read. Para issues, comentarios y revisiones, \
+                el token fino también necesita Issues y Pull requests en lectura y escritura.
+                En un token clásico, el alcance repo cubre privados, issues y pull requests.
                 Los tokens se guardan solo en este equipo.""");
         Label path = new Label(context.store().file().toString());
         path.getStyleClass().add("mono");

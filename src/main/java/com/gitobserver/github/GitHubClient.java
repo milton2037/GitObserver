@@ -2,10 +2,16 @@ package com.gitobserver.github;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitobserver.model.CommitRecord;
 import com.gitobserver.model.ContributorRef;
 import com.gitobserver.model.FileChange;
+import com.gitobserver.model.IssueItem;
+import com.gitobserver.model.IssueNote;
+import com.gitobserver.model.PullItem;
 import com.gitobserver.model.RepoRef;
+import com.gitobserver.model.ReviewNote;
 import com.gitobserver.model.UserProfile;
 
 import java.io.IOException;
@@ -30,6 +36,9 @@ public final class GitHubClient {
     private static final int REPO_PAGES = 50;
     private static final int COMMIT_PAGES = 20;
     private static final int CONTRIBUTOR_PAGES = 10;
+    private static final int ISSUE_PAGES = 3;
+    private static final int COMMENT_PAGES = 3;
+    private static final int PULL_PAGES = 2;
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(20))
@@ -164,6 +173,157 @@ public final class GitHubClient {
             throw new GitHubException(0, "GitHub no devolvió la fecha de ese commit.");
         }
         return commit;
+    }
+
+    public IssueBatch listIssues(String accountAlias, String owner, String repo, String state, BooleanSupplier cancelled) {
+        String url = API + "/repos/" + encode(owner) + "/" + encode(repo)
+                + "/issues?state=" + encode(normalizeState(state)) + "&per_page=100";
+        Page batch = readPages(url, ISSUE_PAGES, true, cancelled);
+        String fullName = owner + "/" + repo;
+        List<IssueItem> issues = new ArrayList<>();
+        for (JsonNode node : batch.nodes) {
+            IssueItem issue = toIssue(accountAlias, fullName, node);
+            if (issue != null) {
+                issues.add(issue);
+            }
+        }
+        return new IssueBatch(issues, batch.truncated);
+    }
+
+    public IssueItem createIssue(String accountAlias, String owner, String repo, String title, String body, List<String> assignees, BooleanSupplier cancelled) {
+        ensureActive(cancelled);
+        ObjectNode payload = issuePayload(title, body, assignees, null);
+        String url = API + "/repos/" + encode(owner) + "/" + encode(repo) + "/issues";
+        HttpResponse<String> response = sendJson("POST", url, payload);
+        IssueItem created = toIssue(accountAlias, owner + "/" + repo, parse(response.body()));
+        if (created == null) {
+            throw new GitHubException(0, "GitHub no devolvió el issue creado.");
+        }
+        return created;
+    }
+
+    public IssueItem updateIssue(
+            String accountAlias,
+            String owner,
+            String repo,
+            int number,
+            String title,
+            String body,
+            List<String> assignees,
+            String state,
+            BooleanSupplier cancelled
+    ) {
+        ensureActive(cancelled);
+        ObjectNode payload = issuePayload(title, body, assignees, state);
+        String url = API + "/repos/" + encode(owner) + "/" + encode(repo) + "/issues/" + number;
+        HttpResponse<String> response = sendJson("PATCH", url, payload);
+        IssueItem updated = toIssue(accountAlias, owner + "/" + repo, parse(response.body()));
+        if (updated == null) {
+            throw new GitHubException(0, "GitHub no devolvió el issue actualizado.");
+        }
+        return updated;
+    }
+
+    public CommentBatch listIssueComments(String owner, String repo, int number, BooleanSupplier cancelled) {
+        String url = API + "/repos/" + encode(owner) + "/" + encode(repo)
+                + "/issues/" + number + "/comments?per_page=100";
+        Page batch = readPages(url, COMMENT_PAGES, true, cancelled);
+        List<IssueNote> notes = new ArrayList<>();
+        for (JsonNode node : batch.nodes) {
+            IssueNote note = toNote(node);
+            if (note != null) {
+                notes.add(note);
+            }
+        }
+        return new CommentBatch(notes, batch.truncated);
+    }
+
+    public IssueNote createIssueComment(String owner, String repo, int number, String body, BooleanSupplier cancelled) {
+        ensureActive(cancelled);
+        if (body == null || body.isBlank()) {
+            throw new GitHubException(0, "Escribe el comentario antes de publicarlo.");
+        }
+        ObjectNode payload = mapper.createObjectNode();
+        payload.put("body", body.strip());
+        String url = API + "/repos/" + encode(owner) + "/" + encode(repo) + "/issues/" + number + "/comments";
+        HttpResponse<String> response = sendJson("POST", url, payload);
+        IssueNote note = toNote(parse(response.body()));
+        if (note == null) {
+            throw new GitHubException(0, "GitHub no devolvió el comentario publicado.");
+        }
+        return note;
+    }
+
+    public PullBatch listPulls(String accountAlias, String owner, String repo, String state, BooleanSupplier cancelled) {
+        String url = API + "/repos/" + encode(owner) + "/" + encode(repo)
+                + "/pulls?state=" + encode(normalizeState(state)) + "&per_page=100";
+        Page batch = readPages(url, PULL_PAGES, true, cancelled);
+        String fullName = owner + "/" + repo;
+        List<PullItem> pulls = new ArrayList<>();
+        for (JsonNode node : batch.nodes) {
+            PullItem pull = toPull(accountAlias, fullName, node);
+            if (pull != null) {
+                pulls.add(pull);
+            }
+        }
+        return new PullBatch(pulls, batch.truncated);
+    }
+
+    public List<ReviewNote> listReviews(String owner, String repo, int number, BooleanSupplier cancelled) {
+        String url = API + "/repos/" + encode(owner) + "/" + encode(repo)
+                + "/pulls/" + number + "/reviews?per_page=100";
+        Page batch = readPages(url, 2, true, cancelled);
+        List<ReviewNote> reviews = new ArrayList<>();
+        for (JsonNode node : batch.nodes) {
+            ReviewNote review = toReview(node);
+            if (review != null && !"PENDING".equals(review.state())) {
+                reviews.add(review);
+            }
+        }
+        return reviews;
+    }
+
+    public ReviewNote createReview(String owner, String repo, int number, String event, String body, BooleanSupplier cancelled) {
+        ensureActive(cancelled);
+        if (body == null || body.isBlank()) {
+            throw new GitHubException(0, "Escribe las instrucciones de la revisión.");
+        }
+        String reviewEvent = switch (event == null ? "" : event) {
+            case "APPROVE", "REQUEST_CHANGES", "COMMENT" -> event;
+            default -> throw new GitHubException(0, "El tipo de revisión no es válido.");
+        };
+        ObjectNode payload = mapper.createObjectNode();
+        payload.put("body", body.strip());
+        payload.put("event", reviewEvent);
+        String url = API + "/repos/" + encode(owner) + "/" + encode(repo) + "/pulls/" + number + "/reviews";
+        HttpResponse<String> response = sendJson("POST", url, payload);
+        ReviewNote review = toReview(parse(response.body()));
+        if (review == null) {
+            throw new GitHubException(0, "GitHub no devolvió la revisión publicada.");
+        }
+        return review;
+    }
+
+    private ObjectNode issuePayload(String title, String body, List<String> assignees, String state) {
+        ObjectNode payload = mapper.createObjectNode();
+        if (title != null) {
+            payload.put("title", title.strip());
+        }
+        if (body != null) {
+            payload.put("body", body.strip());
+        }
+        if (state != null && !state.isBlank()) {
+            payload.put("state", state);
+        }
+        if (assignees != null) {
+            ArrayNode array = payload.putArray("assignees");
+            for (String login : assignees) {
+                if (login != null && !login.isBlank()) {
+                    array.add(login.strip());
+                }
+            }
+        }
+        return payload;
     }
 
     private Map<String, int[]> lineStats(String owner, String repo, BooleanSupplier cancelled) {
@@ -308,7 +468,7 @@ public final class GitHubClient {
             case 401 -> "El token no es válido, expiró o no tiene permiso para entrar a la cuenta.";
             case 403 -> lower.contains("rate limit") || lower.contains("secondary rate")
                     ? "Se alcanzó el límite de consultas de la API de GitHub. Espera unos minutos y vuelve a intentar."
-                    : "GitHub rechazó la consulta. Revisa que el token tenga permiso de lectura del contenido.";
+                    : "GitHub rechazó la consulta. Revisa los permisos del token: contenido, issues o pull requests, según la acción.";
             case 404 -> "No se encontró el recurso. El token puede no tener acceso a ese repositorio.";
             default -> "GitHub respondió con un error (" + status + ").";
         };
@@ -323,6 +483,137 @@ public final class GitHubClient {
             return mapper.readTree(body == null ? "" : body);
         } catch (IOException ex) {
             throw new GitHubException(0, "GitHub devolvió una respuesta que no se pudo leer.");
+        }
+    }
+
+    static IssueItem toIssue(String accountAlias, String repository, JsonNode node) {
+        if (node == null || node.hasNonNull("pull_request") || node.path("number").asInt(0) <= 0) {
+            return null;
+        }
+        return new IssueItem(
+                accountAlias,
+                repository,
+                node.path("number").asInt(),
+                text(node, "title"),
+                text(node, "body"),
+                text(node, "state"),
+                authorOf(node),
+                text(node, "html_url"),
+                parseInstant(text(node, "updated_at")),
+                node.path("comments").asInt(0),
+                logins(node.path("assignees"))
+        );
+    }
+
+    static IssueNote toNote(JsonNode node) {
+        if (node == null || node.path("id").asLong(0) <= 0) {
+            return null;
+        }
+        return new IssueNote(
+                node.path("id").asLong(),
+                authorOf(node),
+                text(node, "body"),
+                parseInstant(text(node, "created_at"))
+        );
+    }
+
+    static PullItem toPull(String accountAlias, String repository, JsonNode node) {
+        if (node == null || node.path("number").asInt(0) <= 0) {
+            return null;
+        }
+        return new PullItem(
+                accountAlias,
+                repository,
+                node.path("number").asInt(),
+                text(node, "title"),
+                text(node, "body"),
+                text(node, "state"),
+                authorOf(node),
+                text(node, "html_url"),
+                parseInstant(text(node, "updated_at")),
+                node.path("draft").asBoolean(false)
+        );
+    }
+
+    static ReviewNote toReview(JsonNode node) {
+        if (node == null || node.path("id").asLong(0) <= 0) {
+            return null;
+        }
+        String when = text(node, "submitted_at");
+        if (when.isBlank()) {
+            when = text(node, "created_at");
+        }
+        return new ReviewNote(
+                node.path("id").asLong(),
+                authorOf(node),
+                text(node, "state"),
+                text(node, "body"),
+                parseInstant(when)
+        );
+    }
+
+    private static String authorOf(JsonNode node) {
+        String author = text(node.path("user"), "login");
+        return author.isBlank() ? "Desconocido" : author;
+    }
+
+    private static String logins(JsonNode array) {
+        if (array == null || !array.isArray() || array.isEmpty()) {
+            return "";
+        }
+        List<String> names = new ArrayList<>();
+        for (JsonNode node : array) {
+            String login = text(node, "login");
+            if (!login.isBlank()) {
+                names.add(login);
+            }
+        }
+        return String.join(", ", names);
+    }
+
+    private static String normalizeState(String state) {
+        if (state == null) {
+            return "open";
+        }
+        return switch (state) {
+            case "closed", "all" -> state;
+            default -> "open";
+        };
+    }
+
+    private HttpResponse<String> sendJson(String method, String url, JsonNode payload) {
+        if (token.isBlank()) {
+            throw new GitHubException(401, "El token está vacío.");
+        }
+        String json;
+        try {
+            json = mapper.writeValueAsString(payload);
+        } catch (IOException ex) {
+            throw new GitHubException(0, "No se pudo preparar la petición para GitHub.");
+        }
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                .timeout(Duration.ofSeconds(30))
+                .header("Authorization", "Bearer " + token)
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .header("User-Agent", "GitObserver")
+                .header("Content-Type", "application/json")
+                .method(method, HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
+                .build();
+        try {
+            HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            updateRateLimit(response);
+            if (response.statusCode() >= 400) {
+                throw error(response.statusCode(), response.body());
+            }
+            return response;
+        } catch (GitHubException ex) {
+            throw ex;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new QueryCancelledException();
+        } catch (IOException ex) {
+            throw new GitHubException(0, "No se pudo conectar con GitHub. Revisa la red e inténtalo de nuevo.");
         }
     }
 
@@ -445,6 +736,15 @@ public final class GitHubClient {
     }
 
     public record ContributorBatch(List<ContributorRef> contributors, boolean truncated) {
+    }
+
+    public record IssueBatch(List<IssueItem> issues, boolean truncated) {
+    }
+
+    public record CommentBatch(List<IssueNote> notes, boolean truncated) {
+    }
+
+    public record PullBatch(List<PullItem> pulls, boolean truncated) {
     }
 
     private record Page(List<JsonNode> nodes, boolean truncated) {

@@ -9,6 +9,8 @@ Aplicación de escritorio para revisar, con uno o varios tokens de GitHub, qué 
 - Consultar los commits acumulados de cada colaborador, por repositorio.
 - Filtrar la actividad por fecha, hora, repositorio y colaborador.
 - Consultar una sola cuenta o todas las cuentas configuradas.
+- Crear issues, comentarlos, cerrarlos o reabrirlos en uno o varios repositorios.
+- Revisar pull requests: comentar, pedir cambios o aprobar, con instrucciones para el autor.
 
 Las consultas usan la rama predeterminada de cada repositorio. Un repositorio visible por dos tokens se consulta una sola vez.
 
@@ -26,12 +28,14 @@ $env:JAVA_HOME = "C:\Program Files\Java\jdk-21"
 .\mvnw.cmd javafx:run
 ```
 
+En el editor, ejecuta `com.gitobserver.Launcher`. Si lanzas `GitObserverApp` directamente, el JDK responde que faltan los componentes de JavaFX.
+
 ## Token de GitHub
 
 1. En GitHub abre **Settings → Developer settings → Personal access tokens**.
-2. Crea un token con permiso de lectura del contenido de los repositorios.
-   - Token fino: acceso a los repositorios que quieras vigilar y permiso **Contents: Read**.
-   - Token clásico: alcance `repo` si necesitas repositorios privados.
+2. Crea un token con permiso sobre los repositorios que quieras vigilar.
+   - Token fino: **Contents: Read** para ver commits. Para issues, comentarios y revisiones, añade **Issues** y **Pull requests** en lectura y escritura.
+   - Token clásico: alcance `repo` si necesitas repositorios privados, issues o pull requests.
 3. En la aplicación abre **Configuración**, pulsa **Agregar cuenta** y pega el token.
 4. Usa **Probar conexión** para confirmar el usuario antes de guardar.
 

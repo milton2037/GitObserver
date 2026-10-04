@@ -17,14 +17,25 @@ public final class Background {
             Consumer<T> onSuccess,
             Consumer<Throwable> onFailure
     ) {
-        if (!context.tryAcquire()) {
+        if (!tryRun(context, task, onStart, onSuccess, onFailure)) {
             Ui.alert(
                     null,
                     javafx.scene.control.Alert.AlertType.WARNING,
                     "Consulta en curso",
                     "Espera a que termine la consulta actual."
             );
-            return;
+        }
+    }
+
+    public static <T> boolean tryRun(
+            AppContext context,
+            Task<T> task,
+            Runnable onStart,
+            Consumer<T> onSuccess,
+            Consumer<Throwable> onFailure
+    ) {
+        if (!context.tryAcquire()) {
+            return false;
         }
         onStart.run();
         task.setOnSucceeded(event -> {
@@ -46,5 +57,6 @@ public final class Background {
         Thread thread = new Thread(task, "gitobserver");
         thread.setDaemon(true);
         thread.start();
+        return true;
     }
 }

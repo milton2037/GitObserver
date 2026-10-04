@@ -29,6 +29,7 @@ public final class MainShell implements Navigator {
     private final StatisticsView statistics;
     private final ContributorsView contributors;
     private final ActivityView activity;
+    private final SeguimientoView followUp;
     private final SettingsView settings;
     private boolean updatingCombo;
 
@@ -38,6 +39,7 @@ public final class MainShell implements Navigator {
         this.statistics = new StatisticsView(context);
         this.contributors = new ContributorsView(context);
         this.activity = new ActivityView(context);
+        this.followUp = new SeguimientoView(context);
         this.settings = new SettingsView(context);
         buildSidebar();
         buildHeader();
@@ -46,6 +48,7 @@ public final class MainShell implements Navigator {
         register(Pages.STATISTICS, statistics.root());
         register(Pages.CONTRIBUTIONS, contributors.root());
         register(Pages.ACTIVITY, activity.root());
+        register(Pages.FOLLOW_UP, followUp.root());
         register(Pages.SETTINGS, settings.root());
         root.setCenter(stack);
         root.getStyleClass().add("app-root");
@@ -79,6 +82,7 @@ public final class MainShell implements Navigator {
             case Pages.STATISTICS -> statistics.onShow();
             case Pages.CONTRIBUTIONS -> contributors.onShow();
             case Pages.ACTIVITY -> activity.onShow();
+            case Pages.FOLLOW_UP -> followUp.onShow();
             default -> {
             }
         }
@@ -112,6 +116,7 @@ public final class MainShell implements Navigator {
                 navButton("Estadísticas", Pages.STATISTICS),
                 navButton("Contribuciones", Pages.CONTRIBUTIONS),
                 navButton("Actividad", Pages.ACTIVITY),
+                navButton("Seguimiento", Pages.FOLLOW_UP),
                 navButton("Configuración", Pages.SETTINGS),
                 spacer,
                 version
@@ -222,6 +227,7 @@ public final class MainShell implements Navigator {
             case Pages.STATISTICS -> "Estadísticas";
             case Pages.CONTRIBUTIONS -> "Contribuciones";
             case Pages.ACTIVITY -> "Actividad";
+            case Pages.FOLLOW_UP -> "Seguimiento";
             case Pages.SETTINGS -> "Configuración";
             default -> "Inicio";
         };
@@ -232,6 +238,7 @@ public final class MainShell implements Navigator {
             case Pages.STATISTICS -> "Parámetros del periodo y resumen de commits, colaboradores y horarios.";
             case Pages.CONTRIBUTIONS -> "Commits, líneas y archivos que cambió cada colaborador.";
             case Pages.ACTIVITY -> "Quién subió cambios en una fecha y hora, con archivos y diff.";
+            case Pages.FOLLOW_UP -> "Issues, comentarios y revisiones para uno o varios repositorios.";
             case Pages.SETTINGS -> "Tokens de acceso para una o varias cuentas de GitHub.";
             default -> "Repositorios que la cuenta activa puede ver.";
         };
