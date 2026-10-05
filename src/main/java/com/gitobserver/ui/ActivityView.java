@@ -4,10 +4,12 @@ import com.gitobserver.AppContext;
 import com.gitobserver.github.QueryCancelledException;
 import com.gitobserver.github.StatsAggregator;
 import com.gitobserver.model.Account;
+import com.gitobserver.model.ActivitySnapshot;
 import com.gitobserver.model.AuthorCount;
 import com.gitobserver.model.CommitRecord;
 import com.gitobserver.model.FetchReport;
 import com.gitobserver.model.TimeRange;
+import com.gitobserver.report.ActivityPdf;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.collections.FXCollections;
@@ -28,15 +30,21 @@ import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
+import javafx.stage.FileChooser;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.Window;
 
+import java.awt.Desktop;
+import java.io.File;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -55,6 +63,7 @@ public final class ActivityView {
     private final CheckBox allAccounts = new CheckBox("Consultar todas las cuentas");
     private final CheckBox hideBots = new CheckBox("Ocultar bots");
     private final Button searchButton = Ui.primary("Consultar");
+    private final Button exportButton = Ui.secondary("Exportar PDF");
     private final Button cancelButton = Ui.secondary("Cancelar");
     private final Label progress = new Label();
     private final Label summary = new Label("Elige un rango y pulsa Consultar.");
@@ -64,6 +73,13 @@ public final class ActivityView {
     private final AtomicBoolean cancelRequested = new AtomicBoolean();
     private List<Account> queriedAccounts = List.of();
     private int detailTicket;
+    private ActivitySnapshot snapshot;
+    private String reportFrom = "";
+    private String reportTo = "";
+    private String reportRepository = "";
+    private String reportAuthor = "";
+    private String reportAccounts = "";
+    private boolean reportHideBots;
 
     public ActivityView(AppContext context) {
         this.context = context;
@@ -95,6 +111,8 @@ public final class ActivityView {
         summary.setWrapText(true);
 
         searchButton.setOnAction(event -> search());
+        exportButton.setDisable(true);
+        exportButton.setOnAction(event -> exportPdf());
         cancelButton.setDisable(true);
         cancelButton.setOnAction(event -> {
             cancelRequested.set(true);
@@ -107,7 +125,7 @@ public final class ActivityView {
         fromRow.setAlignment(Pos.CENTER_LEFT);
         HBox filters = new HBox(10, new Label("Repositorio"), repositories, authorFilter, allAccounts, hideBots);
         filters.setAlignment(Pos.CENTER_LEFT);
-        HBox actions = new HBox(10, searchButton, cancelButton, progress);
+        HBox actions = new HBox(10, searchButton, exportButton, cancelButton, progress);
         actions.setAlignment(Pos.CENTER_LEFT);
 
         configureTable();
@@ -190,6 +208,12 @@ public final class ActivityView {
         String onlyRepo = RepoChoices.only(repositories.getValue());
         String author = authorFilter.getText();
         boolean bots = hideBots.isSelected();
+        reportFrom = Ui.formatInstant(range.start());
+        reportTo = Ui.formatInstant(range.end());
+        reportRepository = onlyRepo == null ? RepoChoices.ALL : onlyRepo;
+        reportAuthor = author == null || author.isBlank() ? "Todos" : author.strip();
+        reportAccounts = allAccounts.isSelected() ? "Todas las cuentas (" + accounts.size() + ")" : accounts.get(0).label();
+        reportHideBots = bots;
         queriedAccounts = List.copyOf(accounts);
         cancelRequested.set(false);
         Task<FetchReport<CommitRecord>> task = new Task<>() {
@@ -213,6 +237,19 @@ public final class ActivityView {
         table.getItems().setAll(report.items());
         changeDetail.showStatus("Selecciona un commit para ver los archivos modificados.");
         List<AuthorCount> counts = StatsAggregator.commitsByAuthor(report.items());
+        snapshot = new ActivitySnapshot(
+                Instant.now(),
+                reportFrom,
+                reportTo,
+                reportRepository,
+                reportAuthor,
+                reportAccounts,
+                reportHideBots,
+                report.cancelled(),
+                report.errors().size(),
+                counts,
+                report.items()
+        );
         showRanking(counts);
         long repos = report.items().stream().map(CommitRecord::repository).distinct().count();
         String text = report.items().size() + " commits · " + counts.size() + " colaboradores · " + repos + " repositorios";
@@ -228,6 +265,7 @@ public final class ActivityView {
             summary.setTooltip(null);
         }
         summary.setText(text);
+        exportButton.setDisable(false);
         context.statusProperty().set(report.cancelled() ? "Consulta cancelada." : "Consulta de actividad terminada.");
         if (report.items().isEmpty() && !report.errors().isEmpty() && !report.cancelled()) {
             Ui.alert(window(), javafx.scene.control.Alert.AlertType.ERROR, "No se pudo consultar la actividad", join(report.errors()));
@@ -361,8 +399,45 @@ public final class ActivityView {
         RepoChoices.fillActive(repositories, context, allAccounts.isSelected());
     }
 
+    private void exportPdf() {
+        if (snapshot == null) {
+            Ui.alert(window(), javafx.scene.control.Alert.AlertType.WARNING, "Sin datos",
+                    "Consulta la actividad antes de exportar el reporte.");
+            return;
+        }
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Guardar reporte PDF");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF", "*.pdf"));
+        chooser.setInitialFileName("gitobserver-actividad-"
+                + DateTimeFormatter.ofPattern("yyyyMMdd-HHmm").format(LocalDateTime.now()) + ".pdf");
+        File file = chooser.showSaveDialog(window());
+        if (file == null) {
+            return;
+        }
+        File target = file.getName().toLowerCase().endsWith(".pdf") ? file : new File(file.getParentFile(), file.getName() + ".pdf");
+        try {
+            ActivityPdf.write(target.toPath(), snapshot);
+        } catch (Exception ex) {
+            Ui.alert(window(), javafx.scene.control.Alert.AlertType.ERROR, "No se pudo crear el PDF", Ui.messageOf(ex));
+            return;
+        }
+        context.statusProperty().set("Reporte guardado: " + target.getAbsolutePath());
+        boolean opened = false;
+        try {
+            if (Desktop.isDesktopSupported()) {
+                Desktop.getDesktop().open(target);
+                opened = true;
+            }
+        } catch (Exception ex) {
+            opened = false;
+        }
+        Ui.alert(window(), javafx.scene.control.Alert.AlertType.INFORMATION, "Reporte guardado",
+                opened ? "Se abrió el PDF:\n" + target.getAbsolutePath() : "Se guardó en:\n" + target.getAbsolutePath());
+    }
+
     private void setRunning(boolean running) {
         searchButton.setDisable(running);
+        exportButton.setDisable(running || snapshot == null);
         cancelButton.setDisable(!running);
         fromDate.setDisable(running);
         toDate.setDisable(running);

@@ -1,6 +1,7 @@
 package com.gitobserver.ui;
 
 import com.gitobserver.AppContext;
+import com.gitobserver.AppInfo;
 import com.gitobserver.model.Account;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -31,6 +32,7 @@ public final class MainShell implements Navigator {
     private final ActivityView activity;
     private final SeguimientoView followUp;
     private final SettingsView settings;
+    private final CreditsView credits;
     private boolean updatingCombo;
 
     public MainShell(AppContext context) {
@@ -41,6 +43,7 @@ public final class MainShell implements Navigator {
         this.activity = new ActivityView(context);
         this.followUp = new SeguimientoView(context);
         this.settings = new SettingsView(context);
+        this.credits = new CreditsView();
         buildSidebar();
         buildHeader();
         buildStatusBar();
@@ -50,6 +53,7 @@ public final class MainShell implements Navigator {
         register(Pages.ACTIVITY, activity.root());
         register(Pages.FOLLOW_UP, followUp.root());
         register(Pages.SETTINGS, settings.root());
+        register(Pages.CREDITS, credits.root());
         root.setCenter(stack);
         root.getStyleClass().add("app-root");
         showPage(Pages.HOME);
@@ -105,9 +109,12 @@ public final class MainShell implements Navigator {
 
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
-        Label version = new Label("Versión 0.1.0");
-        version.getStyleClass().add("brand-sub");
-        version.setPadding(new Insets(8, 8, 0, 8));
+        Button version = new Button("Versión " + AppInfo.VERSION);
+        version.setUserData(Pages.CREDITS);
+        version.getStyleClass().add("version-link");
+        version.setMaxWidth(Double.MAX_VALUE);
+        version.setAlignment(Pos.CENTER_LEFT);
+        version.setOnAction(event -> showPage(Pages.CREDITS));
 
         VBox sidebar = new VBox(6,
                 header,
@@ -229,6 +236,7 @@ public final class MainShell implements Navigator {
             case Pages.ACTIVITY -> "Actividad";
             case Pages.FOLLOW_UP -> "Seguimiento";
             case Pages.SETTINGS -> "Configuración";
+            case Pages.CREDITS -> "Créditos";
             default -> "Inicio";
         };
     }
@@ -240,6 +248,7 @@ public final class MainShell implements Navigator {
             case Pages.ACTIVITY -> "Quién subió cambios en una fecha y hora, con archivos y diff.";
             case Pages.FOLLOW_UP -> "Issues, comentarios y revisiones para uno o varios repositorios.";
             case Pages.SETTINGS -> "Tokens de acceso para una o varias cuentas de GitHub.";
+            case Pages.CREDITS -> "Autor, versión y componentes de la aplicación.";
             default -> "Repositorios que la cuenta activa puede ver.";
         };
     }

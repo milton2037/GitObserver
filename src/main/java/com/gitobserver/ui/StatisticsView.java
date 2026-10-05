@@ -9,7 +9,9 @@ import com.gitobserver.model.BucketCount;
 import com.gitobserver.model.CommitRecord;
 import com.gitobserver.model.FetchReport;
 import com.gitobserver.model.RepoActivity;
+import com.gitobserver.model.StatsSnapshot;
 import com.gitobserver.model.TimeRange;
+import com.gitobserver.report.StatsPdf;
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.collections.FXCollections;
@@ -25,6 +27,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
+import javafx.stage.FileChooser;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Spinner;
@@ -37,10 +40,14 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.Window;
 
+import java.awt.Desktop;
+import java.io.File;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -66,6 +73,7 @@ public final class StatisticsView {
     private final CheckBox allAccounts = new CheckBox("Todas las cuentas");
     private final CheckBox hideBots = new CheckBox("Ocultar bots");
     private final Button generateButton = Ui.primary("Generar estadísticas");
+    private final Button exportButton = Ui.secondary("Exportar PDF");
     private final Button cancelButton = Ui.secondary("Cancelar");
     private final Label progress = new Label();
     private final Label summary = Ui.muted("Elige los parámetros y pulsa Generar estadísticas.");
@@ -79,6 +87,13 @@ public final class StatisticsView {
     private final TableView<RepoActivity> reposTable = new TableView<>();
     private final AtomicBoolean cancelRequested = new AtomicBoolean();
     private boolean applyingPreset;
+    private StatsSnapshot snapshot;
+    private String reportPeriod = "";
+    private String reportFrom = "";
+    private String reportTo = "";
+    private String reportRepository = "";
+    private String reportAccounts = "";
+    private boolean reportHideBots;
 
     public StatisticsView(AppContext context) {
         this.context = context;
@@ -115,6 +130,8 @@ public final class StatisticsView {
         markCustomOnEdit();
 
         generateButton.setOnAction(event -> generate());
+        exportButton.setDisable(true);
+        exportButton.setOnAction(event -> exportPdf());
         cancelButton.setDisable(true);
         cancelButton.setOnAction(event -> {
             cancelRequested.set(true);
@@ -128,7 +145,7 @@ public final class StatisticsView {
                 new Label("Desde"), fromDate, fromHour, muted("h"), fromMinute, muted("min"),
                 new Label("Hasta"), toDate, toHour, muted("h"), toMinute, muted("min"));
         rangeRow.setAlignment(Pos.CENTER_LEFT);
-        HBox scopeRow = new HBox(10, new Label("Repositorio"), repositories, allAccounts, hideBots, generateButton, cancelButton, progress);
+        HBox scopeRow = new HBox(10, new Label("Repositorio"), repositories, allAccounts, hideBots, generateButton, exportButton, cancelButton, progress);
         scopeRow.setAlignment(Pos.CENTER_LEFT);
         VBox parameters = Ui.card(parametersTitle, rangeRow, scopeRow, summary);
 
@@ -200,6 +217,12 @@ public final class StatisticsView {
         }
         String onlyRepo = RepoChoices.only(repositories.getValue());
         boolean bots = hideBots.isSelected();
+        reportPeriod = period.getValue() == null ? "" : period.getValue();
+        reportFrom = Ui.formatInstant(range.start());
+        reportTo = Ui.formatInstant(range.end());
+        reportRepository = onlyRepo == null ? RepoChoices.ALL : onlyRepo;
+        reportAccounts = allAccounts.isSelected() ? "Todas las cuentas (" + accounts.size() + ")" : accounts.get(0).label();
+        reportHideBots = bots;
         cancelRequested.set(false);
         Task<FetchReport<CommitRecord>> task = new Task<>() {
             @Override
@@ -226,10 +249,30 @@ public final class StatisticsView {
         List<BucketCount> hours = StatsAggregator.commitsByHour(commits, zone);
         List<RepoActivity> repositoriesActivity = StatsAggregator.commitsByRepository(commits);
 
+        String peak = StatsAggregator.peakHour(commits, zone);
+        snapshot = new StatsSnapshot(
+                Instant.now(),
+                reportPeriod,
+                reportFrom,
+                reportTo,
+                reportRepository,
+                reportAccounts,
+                reportHideBots,
+                report.cancelled(),
+                report.errors().size(),
+                commits.size(),
+                authors.size(),
+                repositoriesActivity.size(),
+                peak,
+                authors,
+                days,
+                hours,
+                repositoriesActivity
+        );
         commitsValue.setText(Integer.toString(commits.size()));
         peopleValue.setText(Integer.toString(authors.size()));
         reposValue.setText(Integer.toString(repositoriesActivity.size()));
-        peakValue.setText(StatsAggregator.peakHour(commits, zone));
+        peakValue.setText(peak);
         fillAuthors(authors);
         fillBuckets(daysChart, days);
         fillBuckets(hoursChart, hours);
@@ -249,6 +292,7 @@ public final class StatisticsView {
             summary.setTooltip(null);
         }
         summary.setText(text);
+        exportButton.setDisable(false);
         context.statusProperty().set(report.cancelled() ? "Consulta cancelada." : "Estadísticas actualizadas.");
         if (commits.isEmpty() && !report.errors().isEmpty() && !report.cancelled()) {
             Ui.alert(window(), javafx.scene.control.Alert.AlertType.ERROR, "No se pudieron generar las estadísticas", join(report.errors()));
@@ -380,8 +424,45 @@ public final class StatisticsView {
         RepoChoices.fillActive(repositories, context, allAccounts.isSelected());
     }
 
+    private void exportPdf() {
+        if (snapshot == null) {
+            Ui.alert(window(), javafx.scene.control.Alert.AlertType.WARNING, "Sin datos",
+                    "Genera las estadísticas antes de exportar el reporte.");
+            return;
+        }
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Guardar reporte PDF");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF", "*.pdf"));
+        chooser.setInitialFileName("gitobserver-estadisticas-"
+                + DateTimeFormatter.ofPattern("yyyyMMdd-HHmm").format(LocalDateTime.now()) + ".pdf");
+        File file = chooser.showSaveDialog(window());
+        if (file == null) {
+            return;
+        }
+        File target = file.getName().toLowerCase().endsWith(".pdf") ? file : new File(file.getParentFile(), file.getName() + ".pdf");
+        try {
+            StatsPdf.write(target.toPath(), snapshot);
+        } catch (Exception ex) {
+            Ui.alert(window(), javafx.scene.control.Alert.AlertType.ERROR, "No se pudo crear el PDF", Ui.messageOf(ex));
+            return;
+        }
+        context.statusProperty().set("Reporte guardado: " + target.getAbsolutePath());
+        boolean opened = false;
+        try {
+            if (Desktop.isDesktopSupported()) {
+                Desktop.getDesktop().open(target);
+                opened = true;
+            }
+        } catch (Exception ex) {
+            opened = false;
+        }
+        Ui.alert(window(), javafx.scene.control.Alert.AlertType.INFORMATION, "Reporte guardado",
+                opened ? "Se abrió el PDF:\n" + target.getAbsolutePath() : "Se guardó en:\n" + target.getAbsolutePath());
+    }
+
     private void setRunning(boolean running) {
         generateButton.setDisable(running);
+        exportButton.setDisable(running || snapshot == null);
         cancelButton.setDisable(!running);
         period.setDisable(running);
         fromDate.setDisable(running);

@@ -71,6 +71,23 @@
     -fx-font-weight: bold;
 }
 
+.button.version-link {
+    -fx-background-color: transparent;
+    -fx-text-fill: #94a3b8;
+    -fx-font-size: 12px;
+    -fx-font-weight: normal;
+    -fx-alignment: center-left;
+    -fx-padding: 8 8 4 8;
+    -fx-background-radius: 8;
+    -fx-cursor: hand;
+}
+
+.button.version-link:hover,
+.button.version-link.active {
+    -fx-background-color: #1f2937;
+    -fx-text-fill: white;
+}
+
 .top-bar {
     -fx-background-color: white;
     -fx-border-color: transparent transparent #e6ebf2 transparent;
@@ -211,6 +228,14 @@
 .badge-closed {
     -fx-background-color: #e2e8f0;
     -fx-text-fill: #475569;
+}
+
+.credit-version {
+    -fx-background-color: #eef2ff;
+    -fx-text-fill: #3730a3;
+    -fx-background-radius: 999;
+    -fx-padding: 4 12;
+    -fx-font-weight: bold;
 }
 
 .bar {
