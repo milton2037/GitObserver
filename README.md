@@ -5,6 +5,7 @@ Aplicación de escritorio para revisar, con uno o varios tokens de GitHub, qué 
 ## Qué puedes hacer
 
 - Guardar varios tokens, uno por cuenta, y cambiar de cuenta activa.
+- Proteger el acceso a la aplicación con un usuario y contraseña opcionales.
 - Ver los repositorios a los que cada token tiene acceso.
 - Consultar los commits acumulados de cada colaborador, por repositorio.
 - Filtrar la actividad por fecha, hora, repositorio y colaborador.
@@ -13,6 +14,15 @@ Aplicación de escritorio para revisar, con uno o varios tokens de GitHub, qué 
 - Revisar pull requests: comentar, pedir cambios o aprobar, con instrucciones para el autor.
 
 Las consultas usan la rama predeterminada de cada repositorio. Un repositorio visible por dos tokens se consulta una sola vez.
+
+## Seguridad y acceso opcional
+
+En la sección **Configuración** puedes configurar de manera opcional un usuario y una contraseña:
+
+- **Inicio de sesión protegido:** Si está habilitada, GitObserver pedirá el usuario y la contraseña cada vez que se inicie la aplicación o se pulse **Bloquear aplicación** en la barra lateral.
+- **Seguridad:** Las credenciales se almacenan localmente con hash derivado mediante PBKDF2 (HmacSHA256 con 65.536 iteraciones y sal aleatoria criptográfica).
+- **Opcional:** Si no se configura o se desactiva, la aplicación inicia directamente como de costumbre.
+- **Gestión:** Puedes cambiar las credenciales o desactivar la protección en cualquier momento desde la pantalla de Configuración.
 
 ## Requisitos
 

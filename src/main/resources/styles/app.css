@@ -614,3 +614,85 @@
 .follow-tabs > .tab-content-area {
     -fx-background-color: transparent;
 }
+
+.login-root {
+    -fx-background-color: #eef2f7;
+}
+
+.login-sidebar {
+    -fx-background-color: #111827;
+    -fx-padding: 32 26 24 26;
+    -fx-spacing: 16;
+}
+
+.login-sidebar .separator .line {
+    -fx-border-color: transparent transparent transparent transparent;
+    -fx-border-width: 0;
+    -fx-background-color: #1f2937;
+    -fx-pref-height: 1;
+}
+
+.login-hero-title {
+    -fx-text-fill: white;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.login-hero-desc {
+    -fx-text-fill: #94a3b8;
+    -fx-font-size: 12px;
+}
+
+.login-feature-item {
+    -fx-background-color: #192233;
+    -fx-background-radius: 10;
+    -fx-padding: 12 14;
+    -fx-spacing: 4;
+    -fx-border-color: #242f45;
+    -fx-border-radius: 10;
+    -fx-border-width: 1;
+}
+
+.login-feature-title {
+    -fx-text-fill: #e2e8f0;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.login-feature-text {
+    -fx-text-fill: #94a3b8;
+    -fx-font-size: 11px;
+}
+
+.login-main {
+    -fx-background-color: #eef2f7;
+    -fx-padding: 32;
+    -fx-alignment: center;
+}
+
+.login-desktop-box {
+    -fx-background-color: white;
+    -fx-background-radius: 16;
+    -fx-border-color: rgba(15, 23, 42, 0.08);
+    -fx-border-radius: 16;
+    -fx-border-width: 1;
+    -fx-padding: 36 40;
+    -fx-spacing: 14;
+    -fx-effect: dropshadow(gaussian, rgba(15, 23, 42, 0.08), 28, 0, 0, 6);
+}
+
+.login-error-banner {
+    -fx-background-color: #fff1f2;
+    -fx-border-color: #fecdd3;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 10 14;
+    -fx-text-fill: #be123c;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.login-hint-text {
+    -fx-text-fill: #94a3b8;
+    -fx-font-size: 11px;
+}

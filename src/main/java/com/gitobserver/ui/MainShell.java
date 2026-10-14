@@ -34,9 +34,15 @@ public final class MainShell implements Navigator {
     private final SettingsView settings;
     private final CreditsView credits;
     private boolean updatingCombo;
+    private Runnable onLock;
 
     public MainShell(AppContext context) {
+        this(context, null);
+    }
+
+    public MainShell(AppContext context, Runnable onLock) {
         this.context = context;
+        this.onLock = onLock;
         this.dashboard = new DashboardView(context, this);
         this.statistics = new StatisticsView(context);
         this.contributors = new ContributorsView(context);
@@ -61,6 +67,10 @@ public final class MainShell implements Navigator {
 
     public Parent root() {
         return root;
+    }
+
+    public void setOnLock(Runnable onLock) {
+        this.onLock = onLock;
     }
 
     @Override
@@ -116,6 +126,18 @@ public final class MainShell implements Navigator {
         version.setAlignment(Pos.CENTER_LEFT);
         version.setOnAction(event -> showPage(Pages.CREDITS));
 
+        Button lockButton = new Button("Bloquear aplicación");
+        lockButton.getStyleClass().add("nav-button");
+        lockButton.setMaxWidth(Double.MAX_VALUE);
+        lockButton.setAlignment(Pos.CENTER_LEFT);
+        lockButton.visibleProperty().bind(context.securityEnabledProperty());
+        lockButton.managedProperty().bind(context.securityEnabledProperty());
+        lockButton.setOnAction(event -> {
+            if (onLock != null) {
+                onLock.run();
+            }
+        });
+
         VBox sidebar = new VBox(6,
                 header,
                 new Separator(),
@@ -126,6 +148,7 @@ public final class MainShell implements Navigator {
                 navButton("Seguimiento", Pages.FOLLOW_UP),
                 navButton("Configuración", Pages.SETTINGS),
                 spacer,
+                lockButton,
                 version
         );
         sidebar.getStyleClass().add("sidebar");

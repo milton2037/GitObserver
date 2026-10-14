@@ -2,12 +2,16 @@ package com.gitobserver;
 
 import com.gitobserver.config.AppConfig;
 import com.gitobserver.config.ConfigStore;
+import com.gitobserver.config.SecurityConfig;
 import com.gitobserver.github.MonitorService;
 import com.gitobserver.github.RateLimitTracker;
 import com.gitobserver.github.RepositoryCache;
 import com.gitobserver.model.Account;
 import com.gitobserver.model.RepoRef;
+import com.gitobserver.security.PasswordHasher;
+import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
@@ -28,6 +32,7 @@ public final class AppContext implements RepositoryCache {
     private final ObjectProperty<Account> activeAccount = new SimpleObjectProperty<>();
     private final StringProperty status = new SimpleStringProperty("Listo");
     private final StringProperty rateLimitText = new SimpleStringProperty("Cuota de la API: —");
+    private final BooleanProperty securityEnabled = new SimpleBooleanProperty();
     private final RateLimitTracker rateLimits = new RateLimitTracker();
     private final MonitorService monitor;
     private final Map<String, List<RepoRef>> repoCache = new LinkedHashMap<>();
@@ -41,6 +46,7 @@ public final class AppContext implements RepositoryCache {
         config.normalize();
         accounts.setAll(config.getAccounts());
         activeAccount.set(find(config.getActiveAccountId()));
+        securityEnabled.set(config.getSecurity() != null && config.getSecurity().isEnabled());
         loading = false;
     }
 
@@ -159,6 +165,73 @@ public final class AppContext implements RepositoryCache {
             }
         }
         return -1;
+    }
+
+    public BooleanProperty securityEnabledProperty() {
+        return securityEnabled;
+    }
+
+    public boolean isSecurityEnabled() {
+        return securityEnabled.get();
+    }
+
+    public SecurityConfig security() {
+        return config.getSecurity();
+    }
+
+    public boolean checkCredentials(String username, String password) {
+        SecurityConfig sec = config.getSecurity();
+        if (sec == null || !sec.isEnabled()) {
+            return true;
+        }
+        if (username == null || sec.getUsername() == null) {
+            return false;
+        }
+        if (!username.strip().equalsIgnoreCase(sec.getUsername().strip())) {
+            return false;
+        }
+        return PasswordHasher.verify(password, sec.getSalt(), sec.getPasswordHash());
+    }
+
+    public boolean verifyCurrentPassword(String password) {
+        SecurityConfig sec = config.getSecurity();
+        if (sec == null || !sec.isEnabled()) {
+            return true;
+        }
+        return PasswordHasher.verify(password, sec.getSalt(), sec.getPasswordHash());
+    }
+
+    public void updateSecurity(boolean enabled, String username, String newPassword) {
+        SecurityConfig sec = config.getSecurity();
+        if (sec == null) {
+            sec = new SecurityConfig();
+            config.setSecurity(sec);
+        }
+        sec.setEnabled(enabled);
+        if (enabled) {
+            sec.setUsername(username == null ? "" : username.strip());
+            if (newPassword != null && !newPassword.isBlank()) {
+                String salt = PasswordHasher.generateSalt();
+                String hash = PasswordHasher.hash(newPassword, salt);
+                sec.setSalt(salt);
+                sec.setPasswordHash(hash);
+            }
+        }
+        sec.normalize();
+        securityEnabled.set(sec.isEnabled());
+        persist();
+    }
+
+    public void disableSecurity() {
+        SecurityConfig sec = config.getSecurity();
+        if (sec != null) {
+            sec.setEnabled(false);
+            sec.setUsername(null);
+            sec.setPasswordHash(null);
+            sec.setSalt(null);
+        }
+        securityEnabled.set(false);
+        persist();
     }
 
     private void persist() {

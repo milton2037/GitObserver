@@ -9,6 +9,7 @@ import java.util.UUID;
 public final class AppConfig {
     private List<Account> accounts = new ArrayList<>();
     private String activeAccountId;
+    private SecurityConfig security = new SecurityConfig();
 
     public List<Account> getAccounts() {
         if (accounts == null) {
@@ -27,6 +28,17 @@ public final class AppConfig {
 
     public void setActiveAccountId(String activeAccountId) {
         this.activeAccountId = activeAccountId;
+    }
+
+    public SecurityConfig getSecurity() {
+        if (security == null) {
+            security = new SecurityConfig();
+        }
+        return security;
+    }
+
+    public void setSecurity(SecurityConfig security) {
+        this.security = security == null ? new SecurityConfig() : security;
     }
 
     public void normalize() {
@@ -49,5 +61,9 @@ public final class AppConfig {
         if (!activeExists) {
             activeAccountId = accounts.isEmpty() ? null : accounts.get(0).getId();
         }
+        if (security == null) {
+            security = new SecurityConfig();
+        }
+        security.normalize();
     }
 }

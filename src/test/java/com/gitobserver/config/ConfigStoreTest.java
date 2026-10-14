@@ -66,6 +66,48 @@ class ConfigStoreTest {
         assertTrue(Files.exists(folder.resolve("accounts.json.bak")));
     }
 
+    @Test
+    void roundTripsSecurityConfig() {
+        ConfigStore store = new ConfigStore(folder.resolve("accounts.json"));
+        AppConfig config = new AppConfig();
+        SecurityConfig sec = new SecurityConfig(true, "admin", "fakehash123", "fakesalt456");
+        config.setSecurity(sec);
+
+        store.save(config);
+        ConfigStore.LoadResult loaded = store.load();
+
+        SecurityConfig loadedSec = loaded.config().getSecurity();
+        assertNotNull(loadedSec);
+        assertTrue(loadedSec.isEnabled());
+        assertEquals("admin", loadedSec.getUsername());
+        assertEquals("fakehash123", loadedSec.getPasswordHash());
+        assertEquals("fakesalt456", loadedSec.getSalt());
+    }
+
+    @Test
+    void defaultsSecurityToDisabledWhenMissingInJson() throws Exception {
+        Path file = folder.resolve("accounts.json");
+        Files.writeString(file, """
+                {"accounts":[{"alias":"Personal","token":"ghp_1234567890"}]}
+                """, StandardCharsets.UTF_8);
+
+        ConfigStore.LoadResult loaded = new ConfigStore(file).load();
+
+        SecurityConfig sec = loaded.config().getSecurity();
+        assertNotNull(sec);
+        org.junit.jupiter.api.Assertions.assertFalse(sec.isEnabled());
+    }
+
+    @Test
+    void normalizesInvalidSecurityConfig() {
+        AppConfig config = new AppConfig();
+        SecurityConfig sec = new SecurityConfig(true, "   ", "hash", "salt");
+        config.setSecurity(sec);
+        config.normalize();
+
+        org.junit.jupiter.api.Assertions.assertFalse(config.getSecurity().isEnabled());
+    }
+
     private static void assertFalseBlank(String value) {
         assertTrue(value != null && !value.isBlank());
     }
