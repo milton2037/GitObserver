@@ -1,0 +1,105 @@
+name: Build and Release Windows Installer
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versión del lanzamiento (ej. 0.1.0)'
+        required: false
+        default: '0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows Executable & Installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Compile and Test with Maven
+        run: |
+          .\mvnw.cmd clean test
+          .\mvnw.cmd package -DskipTests
+
+      - name: Prepare Package Input
+        run: |
+          New-Item -ItemType Directory -Force -Path target\package-input
+          New-Item -ItemType Directory -Force -Path target\dist
+          .\mvnw.cmd dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory=target\package-input
+          Copy-Item target\gitobserver-*.jar target\package-input\ -Force
+
+      - name: Create App Image with jpackage
+        run: |
+          $ver = "${{ github.ref_name }}".TrimStart('v')
+          if (-not $ver -or $ver -eq "main") { $ver = "${{ github.event.inputs.version }}" }
+          if (-not $ver) { $ver = "0.1.0" }
+          
+          jpackage `
+            --type app-image `
+            --dest target\dist `
+            --name GitObserver `
+            --input target\package-input `
+            --main-jar (Get-ChildItem target\package-input\gitobserver-*.jar | Select-Object -ExpandProperty Name) `
+            --main-class com.gitobserver.Launcher `
+            --app-version $ver `
+            --vendor "Milton Andres Guerrero S." `
+            --description "Monitor de GitHub para colaboradores y repositorios"
+
+      - name: Create Windows Installer (.exe) with jpackage & WiX
+        run: |
+          $ver = "${{ github.ref_name }}".TrimStart('v')
+          if (-not $ver -or $ver -eq "main") { $ver = "${{ github.event.inputs.version }}" }
+          if (-not $ver) { $ver = "0.1.0" }
+
+          jpackage `
+            --type exe `
+            --dest target\dist `
+            --name "GitObserver-Setup" `
+            --app-image target\dist\GitObserver `
+            --app-version $ver `
+            --vendor "Milton Andres Guerrero S." `
+            --win-dir-chooser `
+            --win-menu `
+            --win-shortcut
+
+      - name: Create Portable Zip
+        run: |
+          $ver = "${{ github.ref_name }}".TrimStart('v')
+          if (-not $ver -or $ver -eq "main") { $ver = "${{ github.event.inputs.version }}" }
+          if (-not $ver) { $ver = "0.1.0" }
+          Compress-Archive -Path target\dist\GitObserver\* -DestinationPath target\dist\GitObserver-portable-$ver.zip -Force
+
+      - name: Rename Installer for Release
+        run: |
+          $ver = "${{ github.ref_name }}".TrimStart('v')
+          if (-not $ver -or $ver -eq "main") { $ver = "${{ github.event.inputs.version }}" }
+          if (-not $ver) { $ver = "0.1.0" }
+          $installer = Get-ChildItem target\dist\GitObserver-Setup*.exe | Select-Object -First 1
+          if ($installer) {
+            Copy-Item $installer.FullName target\dist\GitObserver-Setup-$ver.exe -Force
+          }
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            target/dist/GitObserver-Setup-*.exe
+            target/dist/GitObserver-portable-*.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true

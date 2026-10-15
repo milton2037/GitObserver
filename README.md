@@ -40,6 +40,40 @@ $env:JAVA_HOME = "C:\Program Files\Java\jdk-21"
 
 En el editor, ejecuta `com.gitobserver.Launcher`. Si lanzas `GitObserverApp` directamente, el JDK responde que faltan los componentes de JavaFX.
 
+## Distribución en Windows (.exe) y Actualizaciones desde GitHub
+
+GitObserver puede distribuirse como aplicación de escritorio nativa para que tus usuarios la instalen o ejecuten sin necesidad de instalar Java, Maven ni configurar variables de entorno.
+
+### 1. Empaquetar el ejecutable en tu equipo
+
+Para compilar y generar la distribución ejecutable para Windows en tu equipo, ejecuta:
+
+```powershell
+.\package-windows.ps1
+```
+
+El script genera en `target\dist\`:
+- **Ejecutable nativo:** `target\dist\GitObserver\GitObserver.exe` (con runtime Java embebido y dependencias).
+- **Paquete portable:** `target\dist\GitObserver-portable-0.1.0.zip` listo para descomprimir y usar en cualquier PC con Windows.
+
+### 2. Publicación automática con GitHub Actions
+
+El repositorio cuenta con integración continua en `.github/workflows/release.yml`. Para publicar una nueva versión con instalador:
+
+1. Crea y sube una etiqueta de versión:
+   ```powershell
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+2. GitHub Actions compilará el proyecto en un entorno Windows con WiX Toolset, generará el instalador `GitObserver-Setup.exe` y creará automáticamente una **Release** en GitHub con el instalador adjunto.
+3. Tus usuarios solo descargan el archivo `GitObserver-Setup.exe`, lo instalan con un clic y lo usan como cualquier programa de Windows.
+
+### 3. Actualizaciones desde la aplicación
+
+- GitObserver incluye un servicio de verificación de versiones ([UpdateService](file:///c:/Users/usuario/Documents/DEVELOPER/GitObserver/src/main/java/com/gitobserver/update/UpdateService.java)) que consulta GitHub Releases.
+- Si publicas una nueva versión en GitHub, la aplicación muestra una alerta en la barra lateral y en la barra de estado.
+- Desde **Créditos → Actualizaciones**, los usuarios pueden pulsar **Buscar actualizaciones** y **Descargar nueva versión** para obtener el instalador más reciente.
+
 ## Token de GitHub
 
 1. En GitHub abre **Settings → Developer settings → Personal access tokens**.

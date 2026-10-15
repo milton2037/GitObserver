@@ -3,6 +3,7 @@ package com.gitobserver.ui;
 import com.gitobserver.AppContext;
 import com.gitobserver.AppInfo;
 import com.gitobserver.model.Account;
+import com.gitobserver.update.UpdateService;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -33,6 +34,7 @@ public final class MainShell implements Navigator {
     private final SeguimientoView followUp;
     private final SettingsView settings;
     private final CreditsView credits;
+    private final Button versionButton;
     private boolean updatingCombo;
     private Runnable onLock;
 
@@ -49,7 +51,8 @@ public final class MainShell implements Navigator {
         this.activity = new ActivityView(context);
         this.followUp = new SeguimientoView(context);
         this.settings = new SettingsView(context);
-        this.credits = new CreditsView();
+        this.credits = new CreditsView(context);
+        this.versionButton = new Button("Versión " + AppInfo.VERSION);
         buildSidebar();
         buildHeader();
         buildStatusBar();
@@ -63,6 +66,7 @@ public final class MainShell implements Navigator {
         root.setCenter(stack);
         root.getStyleClass().add("app-root");
         showPage(Pages.HOME);
+        checkUpdatesAsync();
     }
 
     public Parent root() {
@@ -119,12 +123,11 @@ public final class MainShell implements Navigator {
 
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
-        Button version = new Button("Versión " + AppInfo.VERSION);
-        version.setUserData(Pages.CREDITS);
-        version.getStyleClass().add("version-link");
-        version.setMaxWidth(Double.MAX_VALUE);
-        version.setAlignment(Pos.CENTER_LEFT);
-        version.setOnAction(event -> showPage(Pages.CREDITS));
+        versionButton.setUserData(Pages.CREDITS);
+        versionButton.getStyleClass().add("version-link");
+        versionButton.setMaxWidth(Double.MAX_VALUE);
+        versionButton.setAlignment(Pos.CENTER_LEFT);
+        versionButton.setOnAction(event -> showPage(Pages.CREDITS));
 
         Button lockButton = new Button("Bloquear aplicación");
         lockButton.getStyleClass().add("nav-button");
@@ -149,12 +152,25 @@ public final class MainShell implements Navigator {
                 navButton("Configuración", Pages.SETTINGS),
                 spacer,
                 lockButton,
-                version
+                versionButton
         );
         sidebar.getStyleClass().add("sidebar");
         sidebar.setPrefWidth(236);
         sidebar.setMinWidth(236);
         root.setLeft(sidebar);
+    }
+
+    private void checkUpdatesAsync() {
+        String token = context.activeAccount() != null ? context.activeAccount().getToken() : null;
+        new UpdateService().checkSilentlyAsync(AppInfo.VERSION, token, info -> {
+            if (info.updateAvailable()) {
+                javafx.application.Platform.runLater(() -> {
+                    versionButton.setText("Versión " + AppInfo.VERSION + " (¡v" + info.latestVersion() + "!)");
+                    versionButton.setStyle("-fx-text-fill: #a5b4fc; -fx-font-weight: bold;");
+                    context.statusProperty().set("Actualización disponible en GitHub: v" + info.latestVersion());
+                });
+            }
+        });
     }
 
     private Button navButton(String text, String pageId) {
