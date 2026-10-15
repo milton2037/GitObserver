@@ -172,8 +172,16 @@ public final class MainShell implements Navigator {
     }
 
     private void checkUpdatesAsync() {
-        String token = context.activeAccount() != null ? context.activeAccount().getToken() : null;
-        new UpdateService().checkSilentlyAsync(AppInfo.VERSION, token, info -> {
+        java.util.List<String> tokens = new java.util.ArrayList<>();
+        if (context.activeAccount() != null && context.activeAccount().getToken() != null) {
+            tokens.add(context.activeAccount().getToken());
+        }
+        for (Account acc : context.accounts()) {
+            if (acc.getToken() != null && !acc.getToken().isBlank() && !tokens.contains(acc.getToken())) {
+                tokens.add(acc.getToken());
+            }
+        }
+        new UpdateService().checkSilentlyAsync(AppInfo.VERSION, tokens, info -> {
             if (info.updateAvailable()) {
                 javafx.application.Platform.runLater(() -> {
                     versionButton.setText("Versión " + AppInfo.VERSION + " (¡v" + info.latestVersion() + "!)");

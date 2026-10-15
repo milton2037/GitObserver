@@ -109,35 +109,91 @@ public final class CreditsView {
         downloadBtn.setVisible(false);
         downloadBtn.setManaged(false);
 
+        Button openReleasesBtn = Ui.secondary("Ver Releases en GitHub");
+        openReleasesBtn.setOnAction(e -> Ui.openUrl("https://github.com/" + UpdateService.DEFAULT_REPO + "/releases"));
+
         checkBtn.setOnAction(event -> {
             checkBtn.setDisable(true);
             statusLabel.setText("Consultando GitHub Releases...");
             statusLabel.getStyleClass().setAll("muted");
-            String token = context != null && context.activeAccount() != null ? context.activeAccount().getToken() : null;
+
+            java.util.List<String> tokens = new java.util.ArrayList<>();
+            if (context != null) {
+                if (context.activeAccount() != null && context.activeAccount().getToken() != null) {
+                    tokens.add(context.activeAccount().getToken());
+                }
+                for (com.gitobserver.model.Account acc : context.accounts()) {
+                    if (acc.getToken() != null && !acc.getToken().isBlank() && !tokens.contains(acc.getToken())) {
+                        tokens.add(acc.getToken());
+                    }
+                }
+            }
 
             new Thread(() -> {
                 try {
-                    UpdateService.ReleaseInfo info = new UpdateService().check(AppInfo.VERSION, token);
+                    UpdateService.ReleaseInfo info = new UpdateService().check(AppInfo.VERSION, tokens);
                     Platform.runLater(() -> {
                         checkBtn.setDisable(false);
-                        if (info.updateAvailable()) {
-                            statusLabel.setText("¡Hay una nueva versión disponible! (v" + info.latestVersion() + ")");
-                            statusLabel.getStyleClass().setAll("status-ok");
-                            if (info.releaseNotes() != null && !info.releaseNotes().isBlank()) {
-                                releaseDetails.setText(info.title() + "\n" + info.releaseNotes());
-                                releaseDetails.setVisible(true);
-                                releaseDetails.setManaged(true);
+                        switch (info.status()) {
+                            case UPDATE_AVAILABLE -> {
+                                statusLabel.setText("¡Hay una nueva versión disponible! (v" + info.latestVersion() + ")");
+                                statusLabel.getStyleClass().setAll("status-ok");
+                                if (info.releaseNotes() != null && !info.releaseNotes().isBlank()) {
+                                    releaseDetails.setText(info.title() + "\n" + info.releaseNotes());
+                                    releaseDetails.setVisible(true);
+                                    releaseDetails.setManaged(true);
+                                }
+                                downloadBtn.setText("Descargar v" + info.latestVersion() + " (.exe)");
+                                downloadBtn.setVisible(true);
+                                downloadBtn.setManaged(true);
+                                downloadBtn.setOnAction(e -> Ui.openUrl(info.downloadUrl()));
+                                openReleasesBtn.setOnAction(e -> Ui.openUrl(info.releaseUrl()));
                             }
-                            downloadBtn.setVisible(true);
-                            downloadBtn.setManaged(true);
-                            downloadBtn.setOnAction(e -> Ui.openUrl(info.downloadUrl()));
-                        } else {
-                            statusLabel.setText("Tienes la versión más reciente instalada (v" + AppInfo.VERSION + ").");
-                            statusLabel.getStyleClass().setAll("muted");
-                            releaseDetails.setVisible(false);
-                            releaseDetails.setManaged(false);
-                            downloadBtn.setVisible(false);
-                            downloadBtn.setManaged(false);
+                            case UP_TO_DATE -> {
+                                statusLabel.setText("Tienes la versión más reciente instalada (v" + AppInfo.VERSION + ").");
+                                statusLabel.getStyleClass().setAll("muted");
+                                releaseDetails.setVisible(false);
+                                releaseDetails.setManaged(false);
+                                downloadBtn.setVisible(false);
+                                downloadBtn.setManaged(false);
+                                openReleasesBtn.setOnAction(e -> Ui.openUrl(info.releaseUrl()));
+                            }
+                            case NO_RELEASES_YET -> {
+                                statusLabel.setText("El repositorio " + UpdateService.DEFAULT_REPO + " fue localizado en GitHub, pero aún no tiene ningún lanzamiento publicado en Releases.");
+                                statusLabel.getStyleClass().setAll("muted");
+                                releaseDetails.setVisible(false);
+                                releaseDetails.setManaged(false);
+                                downloadBtn.setVisible(false);
+                                downloadBtn.setManaged(false);
+                                openReleasesBtn.setOnAction(e -> Ui.openUrl(info.releaseUrl()));
+                            }
+                            case REPO_NOT_FOUND_OR_PRIVATE -> {
+                                statusLabel.setText("No se pudo acceder a GitHub Releases (HTTP 404).\n"
+                                        + "El repositorio '" + UpdateService.DEFAULT_REPO + "' es privado o la cuenta activa no tiene permisos sobre él.\n\n"
+                                        + "💡 Para que cualquier persona pueda actualizar la app con solo el instalador, haz el repositorio público en GitHub.");
+                                statusLabel.getStyleClass().setAll("status-error");
+                                releaseDetails.setVisible(false);
+                                releaseDetails.setManaged(false);
+                                downloadBtn.setVisible(false);
+                                downloadBtn.setManaged(false);
+                                openReleasesBtn.setOnAction(e -> Ui.openUrl("https://github.com/" + UpdateService.DEFAULT_REPO));
+                            }
+                            case RATE_LIMITED -> {
+                                statusLabel.setText("Se alcanzó el límite de solicitudes de la API de GitHub. Intenta nuevamente más tarde o agrega un token en Configuración.");
+                                statusLabel.getStyleClass().setAll("status-error");
+                                releaseDetails.setVisible(false);
+                                releaseDetails.setManaged(false);
+                                downloadBtn.setVisible(false);
+                                downloadBtn.setManaged(false);
+                            }
+                            case ERROR -> {
+                                statusLabel.setText("No se pudo comprobar en GitHub: " + info.message());
+                                statusLabel.getStyleClass().setAll("status-error");
+                                releaseDetails.setVisible(false);
+                                releaseDetails.setManaged(false);
+                                downloadBtn.setVisible(false);
+                                downloadBtn.setManaged(false);
+                            }
                         }
                     });
                 } catch (Exception ex) {
@@ -150,7 +206,7 @@ public final class CreditsView {
             }, "check-updates").start();
         });
 
-        HBox actions = new HBox(10, checkBtn, downloadBtn);
+        HBox actions = new HBox(10, checkBtn, downloadBtn, openReleasesBtn);
         actions.setAlignment(Pos.CENTER_LEFT);
 
         VBox card = Ui.card(title, statusLabel, releaseDetails, actions);
