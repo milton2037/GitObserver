@@ -35,6 +35,23 @@ jobs:
           .\mvnw.cmd clean test
           .\mvnw.cmd package -DskipTests
 
+      - name: Resolve Release Version
+        run: |
+          $ref = "${{ github.ref_name }}"
+          if ($ref -and $ref.StartsWith('v')) {
+            $ver = $ref.TrimStart('v')
+            $tag = $ref
+          } elseif ("${{ github.event.inputs.version }}") {
+            $ver = "${{ github.event.inputs.version }}".TrimStart('v')
+            $tag = "v$ver"
+          } else {
+            $ver = "0.1.0"
+            $tag = "v0.1.0"
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "APP_VERSION=$ver"
+          Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_TAG=$tag"
+          Write-Host "Version calculada: $ver (Tag: $tag)"
+
       - name: Prepare Package Input
         run: |
           New-Item -ItemType Directory -Force -Path target\package-input
@@ -44,10 +61,6 @@ jobs:
 
       - name: Create App Image with jpackage
         run: |
-          $ver = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $ver -or $ver -eq "main") { $ver = "${{ github.event.inputs.version }}" }
-          if (-not $ver) { $ver = "0.1.0" }
-          
           jpackage `
             --type app-image `
             --dest target\dist `
@@ -55,22 +68,18 @@ jobs:
             --input target\package-input `
             --main-jar (Get-ChildItem target\package-input\gitobserver-*.jar | Select-Object -ExpandProperty Name) `
             --main-class com.gitobserver.Launcher `
-            --app-version $ver `
+            --app-version $env:APP_VERSION `
             --vendor "Milton Andres Guerrero S." `
             --description "Monitor de GitHub para colaboradores y repositorios"
 
       - name: Create Windows Installer (.exe) with jpackage & WiX
         run: |
-          $ver = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $ver -or $ver -eq "main") { $ver = "${{ github.event.inputs.version }}" }
-          if (-not $ver) { $ver = "0.1.0" }
-
           jpackage `
             --type exe `
             --dest target\dist `
             --name "GitObserver-Setup" `
             --app-image target\dist\GitObserver `
-            --app-version $ver `
+            --app-version $env:APP_VERSION `
             --vendor "Milton Andres Guerrero S." `
             --win-dir-chooser `
             --win-menu `
@@ -78,25 +87,19 @@ jobs:
 
       - name: Create Portable Zip
         run: |
-          $ver = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $ver -or $ver -eq "main") { $ver = "${{ github.event.inputs.version }}" }
-          if (-not $ver) { $ver = "0.1.0" }
-          Compress-Archive -Path target\dist\GitObserver\* -DestinationPath target\dist\GitObserver-portable-$ver.zip -Force
+          Compress-Archive -Path target\dist\GitObserver\* -DestinationPath "target\dist\GitObserver-portable-$($env:APP_VERSION).zip" -Force
 
-      - name: Rename Installer for Release
+      - name: Verify Artifacts for Release
         run: |
-          $ver = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $ver -or $ver -eq "main") { $ver = "${{ github.event.inputs.version }}" }
-          if (-not $ver) { $ver = "0.1.0" }
-          $installer = Get-ChildItem target\dist\GitObserver-Setup*.exe | Select-Object -First 1
-          if ($installer) {
-            Copy-Item $installer.FullName target\dist\GitObserver-Setup-$ver.exe -Force
-          }
+          Write-Host "Archivos generados para el release:"
+          Get-ChildItem target\dist -File | Select-Object Name, Length
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Release ${{ env.RELEASE_TAG }}
           files: |
             target/dist/GitObserver-Setup-*.exe
             target/dist/GitObserver-portable-*.zip
