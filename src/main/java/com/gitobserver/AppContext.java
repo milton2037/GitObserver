@@ -35,6 +35,7 @@ public final class AppContext implements RepositoryCache {
     private final BooleanProperty securityEnabled = new SimpleBooleanProperty();
     private final RateLimitTracker rateLimits = new RateLimitTracker();
     private final MonitorService monitor;
+    private final com.gitobserver.database.DatabaseService databaseService;
     private final Map<String, List<RepoRef>> repoCache = new LinkedHashMap<>();
     private final AtomicBoolean busy = new AtomicBoolean();
     private boolean loading = true;
@@ -42,8 +43,10 @@ public final class AppContext implements RepositoryCache {
     public AppContext(ConfigStore store, AppConfig config) {
         this.store = store;
         this.config = config;
-        this.monitor = new MonitorService(rateLimits, this);
         config.normalize();
+        this.databaseService = new com.gitobserver.database.DatabaseService(config.getDatabase());
+        this.databaseService.initAsync();
+        this.monitor = new MonitorService(rateLimits, this, databaseService);
         accounts.setAll(config.getAccounts());
         activeAccount.set(find(config.getActiveAccountId()));
         securityEnabled.set(config.getSecurity() != null && config.getSecurity().isEnabled());
@@ -137,12 +140,32 @@ public final class AppContext implements RepositoryCache {
     @Override
     public List<RepoRef> cachedRepos(String accountId) {
         List<RepoRef> repos = repoCache.get(accountId);
-        return repos == null ? null : List.copyOf(repos);
+        if (repos != null) {
+            return List.copyOf(repos);
+        }
+        // Fallback a base de datos si la memoria está fría
+        List<RepoRef> fromDb = databaseService.getCachedRepositories();
+        if (fromDb != null && !fromDb.isEmpty()) {
+            repoCache.put(accountId, fromDb);
+            return fromDb;
+        }
+        return null;
     }
 
     @Override
     public void cacheRepos(String accountId, List<RepoRef> repos) {
         repoCache.put(accountId, List.copyOf(repos));
+        databaseService.saveRepositoriesAsync(repos);
+    }
+
+    public com.gitobserver.database.DatabaseService database() {
+        return databaseService;
+    }
+
+    public void updateDatabaseConfig(com.gitobserver.database.DatabaseConfig newConfig) {
+        config.setDatabase(newConfig);
+        databaseService.reconfigure(newConfig);
+        persist();
     }
 
     @Override

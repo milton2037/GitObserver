@@ -11,6 +11,8 @@ import com.gitobserver.model.RepoRef;
 import com.gitobserver.model.ReviewNote;
 import com.gitobserver.model.TimeRange;
 
+import java.time.Instant;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -30,10 +32,16 @@ import java.util.function.Consumer;
 public final class MonitorService {
     private final RateLimitTracker rateLimits;
     private final RepositoryCache cache;
+    private final com.gitobserver.database.DatabaseService database;
 
     public MonitorService(RateLimitTracker rateLimits, RepositoryCache cache) {
+        this(rateLimits, cache, null);
+    }
+
+    public MonitorService(RateLimitTracker rateLimits, RepositoryCache cache, com.gitobserver.database.DatabaseService database) {
         this.rateLimits = rateLimits;
         this.cache = cache;
+        this.database = database;
     }
 
     public List<RepoRef> loadRepositories(
@@ -110,6 +118,9 @@ public final class MonitorService {
                         cancelled
                 );
                 commits.addAll(batch.commits());
+                if (database != null) {
+                    database.saveCommitsAsync(target.repo().fullName(), batch.commits());
+                }
                 if (batch.truncated()) {
                     errors.add(target.repo().fullName() + ": se mostraron como máximo 2000 commits. Acota el rango.");
                 }
@@ -117,6 +128,17 @@ public final class MonitorService {
         } catch (QueryCancelledException ex) {
             return filteredCommits(commits, errors, authorContains, hideBots, true);
         }
+
+        if (commits.isEmpty() && database != null && repositoryFullName != null && !repositoryFullName.isBlank()) {
+            Instant since = range != null ? range.start() : null;
+            Instant until = range != null ? range.end() : null;
+            List<CommitRecord> cached = database.getCachedCommits(repositoryFullName, since, until);
+            if (!cached.isEmpty()) {
+                errors.add("Sin conexión con GitHub. Mostrando " + cached.size() + " commits guardados en la base de datos.");
+                commits.addAll(cached);
+            }
+        }
+
         return filteredCommits(commits, errors, authorContains, hideBots, cancelled.getAsBoolean());
     }
 
@@ -282,6 +304,9 @@ public final class MonitorService {
                         cancelled
                 );
                 issues.addAll(batch.issues());
+                if (database != null) {
+                    database.saveIssuesAsync(target.repo().fullName(), batch.issues());
+                }
                 if (batch.truncated()) {
                     errors.add(target.repo().fullName() + ": hay más issues de los que se muestran.");
                 }
@@ -289,6 +314,15 @@ public final class MonitorService {
         } catch (QueryCancelledException ex) {
             return sortedIssues(issues, errors, true);
         }
+
+        if (issues.isEmpty() && database != null && repositoryFullName != null && !repositoryFullName.isBlank()) {
+            List<IssueItem> cached = database.getCachedIssues(repositoryFullName, state);
+            if (!cached.isEmpty()) {
+                errors.add("Sin conexión con GitHub. Mostrando " + cached.size() + " issues guardados en la base de datos.");
+                issues.addAll(cached);
+            }
+        }
+
         return sortedIssues(issues, errors, cancelled.getAsBoolean());
     }
 
@@ -384,6 +418,9 @@ public final class MonitorService {
                         cancelled
                 );
                 pulls.addAll(batch.pulls());
+                if (database != null) {
+                    database.savePullRequestsAsync(target.repo().fullName(), batch.pulls());
+                }
                 if (batch.truncated()) {
                     errors.add(target.repo().fullName() + ": hay más pull requests de los que se muestran.");
                 }
@@ -391,6 +428,15 @@ public final class MonitorService {
         } catch (QueryCancelledException ex) {
             return sortedPulls(pulls, errors, true);
         }
+
+        if (pulls.isEmpty() && database != null && repositoryFullName != null && !repositoryFullName.isBlank()) {
+            List<PullItem> cached = database.getCachedPullRequests(repositoryFullName, state);
+            if (!cached.isEmpty()) {
+                errors.add("Sin conexión con GitHub. Mostrando " + cached.size() + " pull requests guardados en la base de datos.");
+                pulls.addAll(cached);
+            }
+        }
+
         return sortedPulls(pulls, errors, cancelled.getAsBoolean());
     }
 

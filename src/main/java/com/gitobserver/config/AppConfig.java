@@ -10,6 +10,7 @@ public final class AppConfig {
     private List<Account> accounts = new ArrayList<>();
     private String activeAccountId;
     private SecurityConfig security = new SecurityConfig();
+    private com.gitobserver.database.DatabaseConfig database = new com.gitobserver.database.DatabaseConfig();
 
     public List<Account> getAccounts() {
         if (accounts == null) {
@@ -39,6 +40,17 @@ public final class AppConfig {
 
     public void setSecurity(SecurityConfig security) {
         this.security = security == null ? new SecurityConfig() : security;
+    }
+
+    public com.gitobserver.database.DatabaseConfig getDatabase() {
+        if (database == null) {
+            database = new com.gitobserver.database.DatabaseConfig();
+        }
+        return database;
+    }
+
+    public void setDatabase(com.gitobserver.database.DatabaseConfig database) {
+        this.database = database == null ? new com.gitobserver.database.DatabaseConfig() : database;
     }
 
     public void normalize() {

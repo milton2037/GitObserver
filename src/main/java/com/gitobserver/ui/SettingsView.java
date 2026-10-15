@@ -1,6 +1,8 @@
 package com.gitobserver.ui;
 
 import com.gitobserver.AppContext;
+import com.gitobserver.database.DatabaseConfig;
+import com.gitobserver.database.DatabaseManager;
 import com.gitobserver.github.GitHubClient;
 import com.gitobserver.github.QueryCancelledException;
 import com.gitobserver.model.Account;
@@ -24,6 +26,7 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Window;
 
 import java.util.List;
+import java.util.Optional;
 
 public final class SettingsView {
     private final AppContext context;
@@ -40,6 +43,12 @@ public final class SettingsView {
     private final Button setupSecurityBtn = Ui.primary("Configurar usuario y contraseña");
     private final Button changeCredentialsBtn = Ui.secondary("Cambiar credenciales");
     private final Button disableSecurityBtn = Ui.danger("Desactivar protección");
+
+    private final Label dbStatusBadge = new Label();
+    private final Label dbStatusDesc = Ui.muted("");
+    private final Label dbStatsLabel = new Label();
+    private final Button configDbBtn = Ui.primary("Configurar base de datos");
+    private final Button clearCacheBtn = Ui.secondary("Limpiar caché local");
 
     public SettingsView(AppContext context) {
         this.context = context;
@@ -103,7 +112,78 @@ public final class SettingsView {
         tableCard.getStyleClass().add("card");
         VBox.setVgrow(table, Priority.ALWAYS);
 
-        content.getChildren().addAll(helpCard, securityCard, tableCard);
+        VBox databaseCard = buildDatabaseCard();
+
+        content.getChildren().addAll(helpCard, securityCard, databaseCard, tableCard);
+    }
+
+    private VBox buildDatabaseCard() {
+        Label title = new Label("Base de datos y caché de consultas");
+        title.getStyleClass().add("section-title");
+
+        Label intro = Ui.muted("Almacena un historial y caché local de repositorios, commits, pull requests e issues para acelerar la aplicación y permitir navegación sin conexión. Soporta SQLite local por defecto o conexión a servidores remotos PostgreSQL y MySQL.");
+        intro.setWrapText(true);
+
+        configDbBtn.setOnAction(event -> openDatabaseDialog());
+        clearCacheBtn.setOnAction(event -> clearDatabaseCache());
+
+        HBox statusRow = new HBox(10, dbStatusBadge, dbStatusDesc);
+        statusRow.setAlignment(Pos.CENTER_LEFT);
+
+        dbStatsLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #2563eb;");
+
+        HBox actionRow = new HBox(10, configDbBtn, clearCacheBtn);
+        actionRow.setAlignment(Pos.CENTER_LEFT);
+
+        refreshDatabaseCard();
+
+        return Ui.card(title, intro, statusRow, dbStatsLabel, actionRow);
+    }
+
+    private void refreshDatabaseCard() {
+        var cfg = context.database().getManager().getConfig();
+        dbStatusBadge.setText(cfg.getType().getDisplayName());
+        dbStatusBadge.getStyleClass().setAll("badge-public");
+        dbStatusDesc.setText(cfg.getSummary());
+
+        Task<DatabaseManager.CacheStats> statsTask = new Task<>() {
+            @Override
+            protected DatabaseManager.CacheStats call() {
+                return context.database().getStats();
+            }
+        };
+        statsTask.setOnSucceeded(e -> {
+            var stats = statsTask.getValue();
+            dbStatsLabel.setText(String.format("📊 En caché: %d repositorios · %d commits · %d pull requests · %d issues",
+                    stats.repositories(), stats.commits(), stats.pullRequests(), stats.issues()));
+        });
+        Thread t = new Thread(statsTask, "db-stats-worker");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private void openDatabaseDialog() {
+        var current = context.database().getManager().getConfig();
+        DatabaseConfigDialog dialog = new DatabaseConfigDialog(window(), current);
+        Optional<DatabaseConfig> result = dialog.showAndWait();
+        result.ifPresent(newConfig -> {
+            context.updateDatabaseConfig(newConfig);
+            refreshDatabaseCard();
+            Ui.alert(window(), Alert.AlertType.INFORMATION, "Base de datos",
+                    "Configuración de base de datos actualizada exitosamente a " + newConfig.getType().getDisplayName());
+        });
+    }
+
+    private void clearDatabaseCache() {
+        try {
+            context.database().clearCache();
+            refreshDatabaseCard();
+            Ui.alert(window(), Alert.AlertType.INFORMATION, "Caché limpiada",
+                    "Se vaciaron los datos locales en caché exitosamente.");
+        } catch (Exception ex) {
+            Ui.alert(window(), Alert.AlertType.ERROR, "Error",
+                    "No se pudo limpiar la caché: " + ex.getMessage());
+        }
     }
 
     private VBox buildSecurityCard() {
