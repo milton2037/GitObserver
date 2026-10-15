@@ -65,6 +65,7 @@ jobs:
             --type app-image `
             --dest target\dist `
             --name GitObserver `
+            --icon "src\main\resources\icons\app.ico" `
             --input target\package-input `
             --main-jar (Get-ChildItem target\package-input\gitobserver-*.jar | Select-Object -ExpandProperty Name) `
             --main-class com.gitobserver.Launcher `
@@ -78,6 +79,7 @@ jobs:
             --type exe `
             --dest target\dist `
             --name "GitObserver-Setup" `
+            --icon "src\main\resources\icons\app.ico" `
             --app-image target\dist\GitObserver `
             --app-version $env:APP_VERSION `
             --vendor "Milton Andres Guerrero S." `

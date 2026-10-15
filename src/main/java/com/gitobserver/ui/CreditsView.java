@@ -8,6 +8,8 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -35,22 +37,34 @@ public final class CreditsView {
         root.setAlignment(Pos.TOP_CENTER);
         root.setFillWidth(true);
 
-        Region mark = new Region();
-        mark.getStyleClass().add("brand-mark");
-        mark.setMinSize(14, 14);
-        mark.setPrefSize(14, 14);
-        mark.setMaxSize(14, 14);
-        Label name = new Label(AppInfo.NAME);
-        name.getStyleClass().add("title");
-        HBox heading = new HBox(10, mark, name);
-        heading.setAlignment(Pos.CENTER_LEFT);
+        ImageView logoView = new ImageView();
+        var stream = getClass().getResourceAsStream("/icons/app-icon-128.png");
+        if (stream != null) {
+            logoView.setImage(new Image(stream));
+            logoView.setFitWidth(52);
+            logoView.setFitHeight(52);
+            logoView.setPreserveRatio(true);
+            logoView.setSmooth(true);
+        }
+
+        Label gitLabel = new Label("Git");
+        gitLabel.setStyle("-fx-text-fill: #0f172a; -fx-font-size: 24px; -fx-font-weight: 800;");
+        Label observerLabel = new Label("Observer");
+        observerLabel.setStyle("-fx-text-fill: #0284c7; -fx-font-size: 24px; -fx-font-weight: 800;");
+        HBox brandText = new HBox(0, gitLabel, observerLabel);
+        brandText.setAlignment(Pos.CENTER_LEFT);
 
         Label version = new Label("Versión " + AppInfo.VERSION);
         version.getStyleClass().add("credit-version");
+
+        VBox brandInfo = new VBox(2, brandText, version);
+        HBox heading = new HBox(14, logoView, brandInfo);
+        heading.setAlignment(Pos.CENTER_LEFT);
+
         Label summary = Ui.muted(AppInfo.DESCRIPTION);
         summary.setWrapText(true);
 
-        VBox identity = Ui.card(heading, version, summary);
+        VBox identity = Ui.card(heading, summary);
         identity.setMaxWidth(640);
         identity.setAlignment(Pos.CENTER_LEFT);
 

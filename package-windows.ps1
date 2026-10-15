@@ -53,6 +53,7 @@ Write-Host "[5/6] Creando distribución ejecutable con runtime embebido (jpackag
     --type app-image `
     --dest "target\dist" `
     --name "GitObserver" `
+    --icon "src\main\resources\icons\app.ico" `
     --input "target\package-input" `
     --main-jar "gitobserver-$Version.jar" `
     --main-class "com.gitobserver.Launcher" `
@@ -77,6 +78,7 @@ if ($hasWix) {
         --type exe `
         --dest "target\dist" `
         --name "GitObserver-Setup" `
+        --icon "src\main\resources\icons\app.ico" `
         --app-image "target\dist\GitObserver" `
         --app-version "$Version" `
         --vendor "Milton Andres Guerrero S." `

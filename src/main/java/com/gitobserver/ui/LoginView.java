@@ -12,6 +12,8 @@ import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.Separator;
 import javafx.scene.control.TextField;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
@@ -91,23 +93,31 @@ public final class LoginView {
         sidebar.setMaxWidth(420);
 
         // Marca de la aplicación
-        Region mark = new Region();
-        mark.getStyleClass().add("brand-mark");
-        mark.setMinSize(14, 14);
-        mark.setPrefSize(14, 14);
-        mark.setMaxSize(14, 14);
+        ImageView logoView = new ImageView();
+        var iconStream = getClass().getResourceAsStream("/icons/app-icon-128.png");
+        if (iconStream != null) {
+            logoView.setImage(new Image(iconStream));
+            logoView.setFitWidth(42);
+            logoView.setFitHeight(42);
+            logoView.setPreserveRatio(true);
+            logoView.setSmooth(true);
+        }
 
-        Label brand = new Label("GitObserver");
-        brand.getStyleClass().add("brand");
-        brand.setStyle("-fx-text-fill: white; -fx-font-size: 20px; -fx-font-weight: bold;");
-
-        HBox brandRow = new HBox(10, mark, brand);
-        brandRow.setAlignment(Pos.CENTER_LEFT);
+        Label gitLabel = new Label("Git");
+        gitLabel.setStyle("-fx-text-fill: white; -fx-font-size: 21px; -fx-font-weight: 800;");
+        Label observerLabel = new Label("Observer");
+        observerLabel.setStyle("-fx-text-fill: #38bdf8; -fx-font-size: 21px; -fx-font-weight: 800;");
+        HBox brandText = new HBox(0, gitLabel, observerLabel);
+        brandText.setAlignment(Pos.CENTER_LEFT);
 
         Label brandSub = new Label("Monitor de GitHub · Edición de escritorio");
         brandSub.getStyleClass().add("brand-sub");
 
-        VBox brandBox = new VBox(4, brandRow, brandSub);
+        VBox brandInfo = new VBox(2, brandText, brandSub);
+        HBox brandRow = new HBox(12, logoView, brandInfo);
+        brandRow.setAlignment(Pos.CENTER_LEFT);
+
+        VBox brandBox = new VBox(brandRow);
 
         // Titular y resumen
         Label heroTitle = new Label("Control de acceso y seguridad");

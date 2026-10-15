@@ -12,6 +12,8 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.Separator;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -107,15 +109,24 @@ public final class MainShell implements Navigator {
     }
 
     private void buildSidebar() {
-        Label brand = new Label("GitObserver");
-        brand.getStyleClass().add("brand");
-        Region mark = new Region();
-        mark.getStyleClass().add("brand-mark");
-        mark.setMinSize(12, 12);
-        mark.setPrefSize(12, 12);
-        mark.setMaxSize(12, 12);
-        HBox brandRow = new HBox(mark, brand);
+        ImageView logoView = new ImageView();
+        var iconStream = getClass().getResourceAsStream("/icons/app-icon-64.png");
+        if (iconStream != null) {
+            logoView.setImage(new Image(iconStream));
+            logoView.setFitWidth(30);
+            logoView.setFitHeight(30);
+            logoView.setPreserveRatio(true);
+            logoView.setSmooth(true);
+        }
+
+        Label gitLabel = new Label("Git");
+        gitLabel.setStyle("-fx-text-fill: white; -fx-font-size: 19px; -fx-font-weight: 800;");
+        Label observerLabel = new Label("Observer");
+        observerLabel.setStyle("-fx-text-fill: #38bdf8; -fx-font-size: 19px; -fx-font-weight: 800;");
+        HBox brandRow = new HBox(6, logoView, new HBox(0, gitLabel, observerLabel));
+        brandRow.setAlignment(Pos.CENTER_LEFT);
         brandRow.getStyleClass().add("brand-row");
+
         Label subtitle = new Label("Monitor de GitHub");
         subtitle.getStyleClass().add("brand-sub");
         VBox header = new VBox(4, brandRow, subtitle);
