@@ -2,6 +2,7 @@ package com.gitobserver.ui;
 
 import com.gitobserver.AppContext;
 import com.gitobserver.GitObserverApp;
+import com.gitobserver.security.PasswordPolicy;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
@@ -78,6 +79,7 @@ public final class SecurityDialog extends Dialog<SecurityDialog.Result> {
                 confirmPassword,
                 confirmPasswordVisible,
                 showPasswords,
+                Ui.muted(PasswordPolicy.rulesDescription()),
                 status
         );
 
@@ -164,20 +166,18 @@ public final class SecurityDialog extends Dialog<SecurityDialog.Result> {
             showStatus("Escribe un nombre de usuario.", false);
             return false;
         }
-        if (user.length() < 2) {
-            showStatus("El nombre de usuario debe tener al menos 2 caracteres.", false);
+        var userError = PasswordPolicy.validateUsername(user);
+        if (userError.isPresent()) {
+            showStatus(userError.get(), false);
             return false;
         }
 
         String pass = currentSecret(password, passwordVisible);
         String confirm = currentSecret(confirmPassword, confirmPasswordVisible);
 
-        if (pass.isEmpty()) {
-            showStatus("Escribe una contraseña.", false);
-            return false;
-        }
-        if (pass.length() < 4) {
-            showStatus("La contraseña debe tener al menos 4 caracteres.", false);
+        var passError = PasswordPolicy.validate(pass);
+        if (passError.isPresent()) {
+            showStatus(passError.get(), false);
             return false;
         }
         if (!pass.equals(confirm)) {

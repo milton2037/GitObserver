@@ -1,6 +1,7 @@
 package com.gitobserver;
 
 import com.gitobserver.config.ConfigStore;
+import com.gitobserver.security.IdleWatch;
 import com.gitobserver.ui.LoginView;
 import com.gitobserver.ui.MainShell;
 import com.gitobserver.ui.Ui;
@@ -30,6 +31,7 @@ public final class GitObserverApp extends Application {
 
         MainShell shell = new MainShell(context);
         LoginView loginView = new LoginView(context, () -> {
+            shell.refreshAccess();
             scene.setRoot(shell.root());
             if (loaded.warning() != null) {
                 Ui.alert(stage, Alert.AlertType.WARNING, "Configuración", loaded.warning());
@@ -37,9 +39,13 @@ public final class GitObserverApp extends Application {
         }, stage::close);
 
         shell.setOnLock(() -> {
+            context.logout();
             loginView.reset();
             scene.setRoot(loginView.root());
         });
+
+        IdleWatch idleWatch = new IdleWatch(context, stage);
+        idleWatch.attach(scene);
 
         if (context.isSecurityEnabled()) {
             loginView.reset();

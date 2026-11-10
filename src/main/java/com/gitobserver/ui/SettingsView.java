@@ -18,6 +18,8 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Spinner;
+import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.layout.HBox;
@@ -40,9 +42,11 @@ public final class SettingsView {
 
     private final Label securityStatusBadge = new Label();
     private final Label securityStatusDesc = Ui.muted("");
-    private final Button setupSecurityBtn = Ui.primary("Configurar usuario y contraseña");
-    private final Button changeCredentialsBtn = Ui.secondary("Cambiar credenciales");
+    private final Button setupSecurityBtn = Ui.primary("Activar usuarios y contraseñas");
+    private final Button changePasswordBtn = Ui.secondary("Cambiar mi contraseña");
     private final Button disableSecurityBtn = Ui.danger("Desactivar protección");
+    private final Spinner<Integer> idleSpinner = new Spinner<>();
+    private final Button saveIdleBtn = Ui.secondary("Guardar cierre por inactividad");
 
     private final Label dbStatusBadge = new Label();
     private final Label dbStatusDesc = Ui.muted("");
@@ -190,22 +194,32 @@ public final class SettingsView {
         Label title = new Label("Seguridad y acceso a la aplicación");
         title.getStyleClass().add("section-title");
 
-        Label intro = Ui.muted("Protege el acceso a GitObserver mediante un usuario y una contraseña al abrir la aplicación. Esta opción es opcional y se puede activar o desactivar en cualquier momento.");
+        Label intro = Ui.muted("Protege GitObserver con usuarios, roles y contraseñas con hash PBKDF2. "
+                + "Puedes parametrizar el cierre automático si nadie usa la aplicación.");
         intro.setWrapText(true);
 
+        idleSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(0, 240, Math.max(0, context.idleTimeoutMinutes())));
+        idleSpinner.setEditable(true);
+        idleSpinner.setPrefWidth(90);
+        Label idleHelp = Ui.muted("Minutos sin uso antes de cerrar la aplicación. 0 desactiva el cierre automático.");
+        saveIdleBtn.setOnAction(event -> saveIdleTimeout());
+
         setupSecurityBtn.setOnAction(event -> openSecurityDialog(false));
-        changeCredentialsBtn.setOnAction(event -> openSecurityDialog(true));
+        changePasswordBtn.setOnAction(event -> openChangePassword());
         disableSecurityBtn.setOnAction(event -> disableSecurity());
 
         HBox statusRow = new HBox(10, securityStatusBadge, securityStatusDesc);
         statusRow.setAlignment(Pos.CENTER_LEFT);
 
-        HBox actionRow = new HBox(10, setupSecurityBtn, changeCredentialsBtn, disableSecurityBtn);
+        HBox idleRow = new HBox(10, new Label("Cierre por inactividad (minutos)"), idleSpinner, saveIdleBtn);
+        idleRow.setAlignment(Pos.CENTER_LEFT);
+
+        HBox actionRow = new HBox(10, setupSecurityBtn, changePasswordBtn, disableSecurityBtn);
         actionRow.setAlignment(Pos.CENTER_LEFT);
 
         refreshSecurityCard();
 
-        return Ui.card(title, intro, statusRow, actionRow);
+        return Ui.card(title, intro, statusRow, idleHelp, idleRow, actionRow);
     }
 
     private void refreshSecurityCard() {
@@ -213,14 +227,17 @@ public final class SettingsView {
         if (enabled) {
             securityStatusBadge.setText("Protección activada");
             securityStatusBadge.getStyleClass().setAll("badge-public");
-            String user = context.security().getUsername();
-            securityStatusDesc.setText("Usuario: @" + (user == null ? "" : user) + " · Se solicitará inicio de sesión al abrir o bloquear la aplicación.");
+            var session = context.currentUser();
+            String sessionName = session == null ? "—" : session.getUsername();
+            String roleName = session == null || session.getRole() == null ? "" : session.getRole().getDisplayName();
+            securityStatusDesc.setText("Sesión: @" + sessionName + (roleName.isBlank() ? "" : " · " + roleName)
+                    + " · " + context.users().size() + " usuario(s). Se pide inicio de sesión al abrir o cerrar sesión.");
 
             setupSecurityBtn.setVisible(false);
             setupSecurityBtn.setManaged(false);
 
-            changeCredentialsBtn.setVisible(true);
-            changeCredentialsBtn.setManaged(true);
+            changePasswordBtn.setVisible(true);
+            changePasswordBtn.setManaged(true);
 
             disableSecurityBtn.setVisible(true);
             disableSecurityBtn.setManaged(true);
@@ -232,8 +249,8 @@ public final class SettingsView {
             setupSecurityBtn.setVisible(true);
             setupSecurityBtn.setManaged(true);
 
-            changeCredentialsBtn.setVisible(false);
-            changeCredentialsBtn.setManaged(false);
+            changePasswordBtn.setVisible(false);
+            changePasswordBtn.setManaged(false);
 
             disableSecurityBtn.setVisible(false);
             disableSecurityBtn.setManaged(false);
@@ -244,10 +261,32 @@ public final class SettingsView {
         Window owner = window();
         SecurityDialog dialog = new SecurityDialog(owner, context, editing);
         dialog.showAndWait().ifPresent(res -> {
-            context.updateSecurity(true, res.username(), res.password());
+            var error = context.enableSecurity(res.username(), res.password());
+            if (error.isPresent()) {
+                Ui.alert(owner, Alert.AlertType.ERROR, "Seguridad", error.get());
+                return;
+            }
             refreshSecurityCard();
             context.statusProperty().set(editing ? "Credenciales de acceso actualizadas." : "Protección de acceso activada.");
         });
+    }
+
+    private void openChangePassword() {
+        Window owner = window();
+        ChangePasswordDialog dialog = new ChangePasswordDialog(owner, context);
+        dialog.showAndWait().ifPresent(saved -> {
+            if (Boolean.TRUE.equals(saved)) {
+                context.statusProperty().set("Contraseña actualizada.");
+            }
+        });
+    }
+
+    private void saveIdleTimeout() {
+        Integer minutes = idleSpinner.getValue();
+        context.setIdleTimeoutMinutes(minutes == null ? 0 : minutes);
+        context.statusProperty().set(minutes == null || minutes == 0
+                ? "Cierre por inactividad desactivado."
+                : "La aplicación se cerrará tras " + minutes + " minuto(s) sin uso.");
     }
 
     private void disableSecurity() {

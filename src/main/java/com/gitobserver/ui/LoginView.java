@@ -36,7 +36,7 @@ public final class LoginView {
     private final TextField passwordVisible = new TextField();
     private final CheckBox showPassword = new CheckBox("Mostrar contraseña");
     private final Label errorBanner = new Label();
-    private final Button loginButton = Ui.primary("Desbloquear aplicación");
+    private final Button loginButton = Ui.primary("Iniciar sesión");
     private final Button exitButton = Ui.secondary("Cerrar aplicación");
     private boolean syncing;
 
@@ -58,14 +58,8 @@ public final class LoginView {
         errorBanner.setVisible(false);
         errorBanner.setManaged(false);
 
-        String configuredUser = context.security().getUsername();
-        if (configuredUser != null && !configuredUser.isBlank()) {
-            usernameField.setText(configuredUser);
-            Platform.runLater(passwordField::requestFocus);
-        } else {
-            usernameField.clear();
-            Platform.runLater(usernameField::requestFocus);
-        }
+        usernameField.clear();
+        Platform.runLater(usernameField::requestFocus);
     }
 
     private void build() {
@@ -123,22 +117,22 @@ public final class LoginView {
         Label heroTitle = new Label("Control de acceso y seguridad");
         heroTitle.getStyleClass().add("login-hero-title");
 
-        Label heroDesc = new Label("Protección local de cuentas, tokens y consultas para este equipo de trabajo.");
+        Label heroDesc = new Label("Acceso por usuario, rol y contraseña. Auditoría de ingresos y cierre por inactividad.");
         heroDesc.getStyleClass().add("login-hero-desc");
         heroDesc.setWrapText(true);
 
         // Tarjetas informativas de características de escritorio
         VBox feature1 = featureCard(
-                "🔒 Acceso protegido por contraseña",
-                "Requiere autenticación maestra antes de abrir repositorios y estadísticas."
+                "🔒 Inicio de sesión y roles",
+                "Administrador, analista y consultor, con módulos según el permiso de cada rol."
         );
         VBox feature2 = featureCard(
-                "🛡️ Tokens resguardados en este equipo",
-                "Las claves se almacenan en tu perfil local con hash criptográfico PBKDF2."
+                "🛡️ Contraseñas con hash PBKDF2",
+                "Reglas de longitud, números y símbolos. Las claves no se guardan en texto plano."
         );
         VBox feature3 = featureCard(
-                "📊 Monitor de actividad y colaboradores",
-                "Consulta commits por fecha y hora, ranking de cambios, issues y pull requests."
+                "📋 Auditoría de accesos",
+                "Se registra cada ingreso e intento fallido, con fecha, hora y usuario."
         );
 
         VBox features = new VBox(10, feature1, feature2, feature3);
@@ -194,7 +188,7 @@ public final class LoginView {
         HBox topRow = new HBox(8, badge, topSpacer, localTag);
         topRow.setAlignment(Pos.CENTER_LEFT);
 
-        Label title = new Label("Desbloquear aplicación");
+        Label title = new Label("Iniciar sesión");
         title.getStyleClass().add("title");
 
         Label subtitle = Ui.muted("Ingresa tu usuario y contraseña para continuar en tu espacio de trabajo.");
@@ -333,8 +327,8 @@ public final class LoginView {
             return;
         }
 
-        if (!context.checkCredentials(user, pass)) {
-            showError("Usuario o contraseña incorrectos. Verifica tus credenciales.");
+        if (!context.login(user, pass)) {
+            showError("Usuario o contraseña incorrectos. El intento quedó registrado en auditoría.");
             passwordField.clear();
             passwordVisible.clear();
             if (showPassword.isSelected()) {

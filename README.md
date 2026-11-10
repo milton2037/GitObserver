@@ -17,12 +17,17 @@ Las consultas usan la rama predeterminada de cada repositorio. Un repositorio vi
 
 ## Seguridad y acceso opcional
 
-En la sección **Configuración** puedes configurar de manera opcional un usuario y una contraseña:
+En **Configuración** puedes activar el control de acceso local:
 
-- **Inicio de sesión protegido:** Si está habilitada, GitObserver pedirá el usuario y la contraseña cada vez que se inicie la aplicación o se pulse **Bloquear aplicación** en la barra lateral.
-- **Seguridad:** Las credenciales se almacenan localmente con hash derivado mediante PBKDF2 (HmacSHA256 con 65.536 iteraciones y sal aleatoria criptográfica).
-- **Opcional:** Si no se configura o se desactiva, la aplicación inicia directamente como de costumbre.
-- **Gestión:** Puedes cambiar las credenciales o desactivar la protección en cualquier momento desde la pantalla de Configuración.
+- **Inicio y cierre de sesión:** Con la protección activa, GitObserver pide usuario y contraseña al abrir. **Cerrar sesión** vuelve a la pantalla de acceso.
+- **Contraseñas con hash:** Se guardan con PBKDF2 (HmacSHA256, 65.536 iteraciones y sal aleatoria). Nunca en texto plano.
+- **Reglas de contraseña:** Mínimo 8 caracteres, con al menos una letra, un número y un símbolo especial.
+- **Cambio de contraseña:** Cada usuario puede cambiar la suya desde la barra superior.
+- **Tres roles:** Administrador (usuarios, roles, auditoría y configuración), Analista (monitor operativo, incluido seguimiento) y Consultor (consulta de tableros, sin seguimiento ni configuración).
+- **Módulos por rol:** El menú solo muestra las pantallas permitidas.
+- **Auditoría:** Cada acceso y cada intento fallido se registra con fecha, hora y usuario. Solo el administrador consulta **Auditoría**.
+- **Cierre por inactividad:** En Configuración se indica cuántos minutos sin uso cierran la aplicación. `0` desactiva el cierre automático.
+- **Opcional:** Si no se activa, la aplicación abre sin login, como antes.
 
 ## Requisitos
 

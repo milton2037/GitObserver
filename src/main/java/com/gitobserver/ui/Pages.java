@@ -7,6 +7,8 @@ public final class Pages {
     public static final String ACTIVITY = "activity";
     public static final String FOLLOW_UP = "follow-up";
     public static final String SETTINGS = "settings";
+    public static final String USERS = "users";
+    public static final String AUDIT = "audit";
     public static final String CREDITS = "credits";
 
     private Pages() {

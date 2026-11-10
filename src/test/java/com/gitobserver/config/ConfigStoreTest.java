@@ -82,6 +82,8 @@ class ConfigStoreTest {
         assertEquals("admin", loadedSec.getUsername());
         assertEquals("fakehash123", loadedSec.getPasswordHash());
         assertEquals("fakesalt456", loadedSec.getSalt());
+        assertEquals(1, loadedSec.getUsers().size());
+        assertEquals("admin", loadedSec.getUsers().get(0).getUsername());
     }
 
     @Test

@@ -6,9 +6,14 @@ import com.gitobserver.config.SecurityConfig;
 import com.gitobserver.github.MonitorService;
 import com.gitobserver.github.RateLimitTracker;
 import com.gitobserver.github.RepositoryCache;
+import com.gitobserver.model.AccessLogEntry;
 import com.gitobserver.model.Account;
+import com.gitobserver.model.AppUser;
 import com.gitobserver.model.RepoRef;
 import com.gitobserver.security.PasswordHasher;
+import com.gitobserver.security.PasswordPolicy;
+import com.gitobserver.security.Permission;
+import com.gitobserver.security.UserRole;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -23,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class AppContext implements RepositoryCache {
@@ -30,6 +36,7 @@ public final class AppContext implements RepositoryCache {
     private final AppConfig config;
     private final ObservableList<Account> accounts = FXCollections.observableArrayList();
     private final ObjectProperty<Account> activeAccount = new SimpleObjectProperty<>();
+    private final ObjectProperty<AppUser> currentUser = new SimpleObjectProperty<>();
     private final StringProperty status = new SimpleStringProperty("Listo");
     private final StringProperty rateLimitText = new SimpleStringProperty("Cuota de la API: —");
     private final BooleanProperty securityEnabled = new SimpleBooleanProperty();
@@ -143,7 +150,6 @@ public final class AppContext implements RepositoryCache {
         if (repos != null) {
             return List.copyOf(repos);
         }
-        // Fallback a base de datos si la memoria está fría
         List<RepoRef> fromDb = databaseService.getCachedRepositories();
         if (fromDb != null && !fromDb.isEmpty()) {
             repoCache.put(accountId, fromDb);
@@ -202,18 +208,104 @@ public final class AppContext implements RepositoryCache {
         return config.getSecurity();
     }
 
+    public ObjectProperty<AppUser> currentUserProperty() {
+        return currentUser;
+    }
+
+    public AppUser currentUser() {
+        return currentUser.get();
+    }
+
+    public UserRole currentRole() {
+        AppUser user = currentUser.get();
+        return user == null ? null : user.getRole();
+    }
+
+    public boolean hasPermission(Permission permission) {
+        if (!isSecurityEnabled()) {
+            return permission != Permission.MANAGE_USERS && permission != Permission.VIEW_AUDIT;
+        }
+        AppUser user = currentUser.get();
+        if (user == null || !user.isEnabled()) {
+            return false;
+        }
+        return user.getRole().allows(permission);
+    }
+
+    public boolean canAccessPage(String pageId) {
+        if (pageId == null) {
+            return false;
+        }
+        return switch (pageId) {
+            case "home" -> hasPermission(Permission.VIEW_HOME);
+            case "statistics" -> hasPermission(Permission.VIEW_STATISTICS);
+            case "contributions" -> hasPermission(Permission.VIEW_CONTRIBUTIONS);
+            case "activity" -> hasPermission(Permission.VIEW_ACTIVITY);
+            case "follow-up" -> hasPermission(Permission.VIEW_FOLLOW_UP);
+            case "settings" -> hasPermission(Permission.VIEW_SETTINGS);
+            case "users" -> hasPermission(Permission.MANAGE_USERS);
+            case "audit" -> hasPermission(Permission.VIEW_AUDIT);
+            case "credits" -> true;
+            default -> false;
+        };
+    }
+
+    public List<AppUser> users() {
+        return List.copyOf(security().getUsers());
+    }
+
+    public List<AccessLogEntry> accessLog() {
+        return List.copyOf(security().getAccessLog());
+    }
+
+    public int idleTimeoutMinutes() {
+        return security().getIdleTimeoutMinutes();
+    }
+
+    public void setIdleTimeoutMinutes(int minutes) {
+        int value = Math.max(0, Math.min(SecurityConfig.MAX_IDLE_MINUTES, minutes));
+        security().setIdleTimeoutMinutes(value);
+        persist();
+    }
+
+    public boolean login(String username, String password) {
+        if (!isSecurityEnabled()) {
+            return true;
+        }
+        String user = username == null ? "" : username.strip();
+        String display = user.isBlank() ? "(vacío)" : user;
+        AppUser found = findUser(user);
+        if (found == null) {
+            recordAccess(display, false, "Intento fallido: usuario no encontrado");
+            return false;
+        }
+        if (!found.isEnabled()) {
+            recordAccess(found.getUsername(), false, "Intento fallido: usuario deshabilitado");
+            return false;
+        }
+        if (!PasswordHasher.verify(password, found.getSalt(), found.getPasswordHash())) {
+            recordAccess(found.getUsername(), false, "Intento fallido: contraseña incorrecta");
+            return false;
+        }
+        currentUser.set(found);
+        recordAccess(found.getUsername(), true, "Acceso correcto · " + found.getRole().getDisplayName());
+        return true;
+    }
+
+    public void logout() {
+        currentUser.set(null);
+    }
+
     public boolean checkCredentials(String username, String password) {
         SecurityConfig sec = config.getSecurity();
         if (sec == null || !sec.isEnabled()) {
             return true;
         }
-        if (username == null || sec.getUsername() == null) {
+        AppUser found = findUser(username);
+        if (found == null || !found.isEnabled()) {
             return false;
         }
-        if (!username.strip().equalsIgnoreCase(sec.getUsername().strip())) {
-            return false;
-        }
-        return PasswordHasher.verify(password, sec.getSalt(), sec.getPasswordHash());
+        return PasswordHasher.verify(password, found.getSalt(), found.getPasswordHash());
     }
 
     public boolean verifyCurrentPassword(String password) {
@@ -221,7 +313,18 @@ public final class AppContext implements RepositoryCache {
         if (sec == null || !sec.isEnabled()) {
             return true;
         }
-        return PasswordHasher.verify(password, sec.getSalt(), sec.getPasswordHash());
+        AppUser user = currentUser.get();
+        if (user == null) {
+            List<AppUser> users = sec.getUsers();
+            if (users.size() == 1) {
+                user = users.get(0);
+            } else if (sec.getPasswordHash() != null && sec.getSalt() != null) {
+                return PasswordHasher.verify(password, sec.getSalt(), sec.getPasswordHash());
+            } else {
+                return false;
+            }
+        }
+        return PasswordHasher.verify(password, user.getSalt(), user.getPasswordHash());
     }
 
     public void updateSecurity(boolean enabled, String username, String newPassword) {
@@ -230,30 +333,214 @@ public final class AppContext implements RepositoryCache {
             sec = new SecurityConfig();
             config.setSecurity(sec);
         }
-        sec.setEnabled(enabled);
-        if (enabled) {
-            sec.setUsername(username == null ? "" : username.strip());
-            if (newPassword != null && !newPassword.isBlank()) {
-                String salt = PasswordHasher.generateSalt();
-                String hash = PasswordHasher.hash(newPassword, salt);
-                sec.setSalt(salt);
-                sec.setPasswordHash(hash);
-            }
+        if (!enabled) {
+            disableSecurity();
+            return;
         }
+        sec.setEnabled(true);
+        String name = username == null ? "" : username.strip();
+        AppUser user = findUser(name);
+        if (user == null) {
+            user = AppUser.create(name, null, null, UserRole.ADMINISTRADOR);
+            sec.getUsers().add(user);
+        } else {
+            user.setUsername(name);
+        }
+        if (newPassword != null && !newPassword.isBlank()) {
+            String salt = PasswordHasher.generateSalt();
+            user.setSalt(salt);
+            user.setPasswordHash(PasswordHasher.hash(newPassword, salt));
+        }
+        user.setEnabled(true);
         sec.normalize();
         securityEnabled.set(sec.isEnabled());
         persist();
+    }
+
+    public Optional<String> enableSecurity(String username, String password) {
+        Optional<String> userError = PasswordPolicy.validateUsername(username);
+        if (userError.isPresent()) {
+            return userError;
+        }
+        Optional<String> passError = PasswordPolicy.validate(password);
+        if (passError.isPresent()) {
+            return passError;
+        }
+        updateSecurity(true, username.strip(), password);
+        AppUser admin = findUser(username);
+        if (admin != null) {
+            currentUser.set(admin);
+        }
+        return Optional.empty();
     }
 
     public void disableSecurity() {
         SecurityConfig sec = config.getSecurity();
         if (sec != null) {
             sec.setEnabled(false);
+            sec.getUsers().clear();
             sec.setUsername(null);
             sec.setPasswordHash(null);
             sec.setSalt(null);
         }
+        currentUser.set(null);
         securityEnabled.set(false);
+        persist();
+    }
+
+    public Optional<String> changeOwnPassword(String currentPassword, String newPassword) {
+        if (!hasPermission(Permission.CHANGE_OWN_PASSWORD) && isSecurityEnabled()) {
+            return Optional.of("No tienes permiso para cambiar la contraseña.");
+        }
+        AppUser user = currentUser.get();
+        if (user == null) {
+            return Optional.of("No hay una sesión activa.");
+        }
+        if (!PasswordHasher.verify(currentPassword, user.getSalt(), user.getPasswordHash())) {
+            return Optional.of("La contraseña actual no es correcta.");
+        }
+        Optional<String> passError = PasswordPolicy.validate(newPassword);
+        if (passError.isPresent()) {
+            return passError;
+        }
+        String salt = PasswordHasher.generateSalt();
+        user.setSalt(salt);
+        user.setPasswordHash(PasswordHasher.hash(newPassword, salt));
+        persist();
+        return Optional.empty();
+    }
+
+    public Optional<String> createUser(String username, String password, UserRole role) {
+        if (!hasPermission(Permission.MANAGE_USERS)) {
+            return Optional.of("Solo el administrador puede crear usuarios.");
+        }
+        Optional<String> userError = PasswordPolicy.validateUsername(username);
+        if (userError.isPresent()) {
+            return userError;
+        }
+        Optional<String> passError = PasswordPolicy.validate(password);
+        if (passError.isPresent()) {
+            return passError;
+        }
+        if (findUser(username) != null) {
+            return Optional.of("Ya existe un usuario con ese nombre.");
+        }
+        UserRole assigned = role == null ? UserRole.CONSULTOR : role;
+        String salt = PasswordHasher.generateSalt();
+        AppUser user = AppUser.create(username.strip(), PasswordHasher.hash(password, salt), salt, assigned);
+        security().getUsers().add(user);
+        persist();
+        return Optional.empty();
+    }
+
+    public Optional<String> updateUser(String userId, String username, String newPassword, UserRole role, boolean enabled) {
+        if (!hasPermission(Permission.MANAGE_USERS)) {
+            return Optional.of("Solo el administrador puede editar usuarios.");
+        }
+        AppUser user = findUserById(userId);
+        if (user == null) {
+            return Optional.of("El usuario no existe.");
+        }
+        Optional<String> userError = PasswordPolicy.validateUsername(username);
+        if (userError.isPresent()) {
+            return userError;
+        }
+        AppUser duplicate = findUser(username);
+        if (duplicate != null && !duplicate.getId().equals(userId)) {
+            return Optional.of("Ya existe un usuario con ese nombre.");
+        }
+        UserRole assigned = role == null ? user.getRole() : role;
+        if (user.getRole() == UserRole.ADMINISTRADOR && assigned != UserRole.ADMINISTRADOR && enabledAdmins() <= 1) {
+            return Optional.of("Debe quedar al menos un administrador activo.");
+        }
+        if (user.getRole() == UserRole.ADMINISTRADOR && !enabled && enabledAdmins() <= 1) {
+            return Optional.of("No se puede deshabilitar al único administrador.");
+        }
+        if (newPassword != null && !newPassword.isBlank()) {
+            Optional<String> passError = PasswordPolicy.validate(newPassword);
+            if (passError.isPresent()) {
+                return passError;
+            }
+            String salt = PasswordHasher.generateSalt();
+            user.setSalt(salt);
+            user.setPasswordHash(PasswordHasher.hash(newPassword, salt));
+        }
+        user.setUsername(username.strip());
+        user.setRole(assigned);
+        user.setEnabled(enabled);
+        AppUser session = currentUser.get();
+        if (session != null && session.getId().equals(user.getId())) {
+            currentUser.set(user);
+        }
+        persist();
+        return Optional.empty();
+    }
+
+    public Optional<String> deleteUser(String userId) {
+        if (!hasPermission(Permission.MANAGE_USERS)) {
+            return Optional.of("Solo el administrador puede eliminar usuarios.");
+        }
+        AppUser user = findUserById(userId);
+        if (user == null) {
+            return Optional.of("El usuario no existe.");
+        }
+        AppUser session = currentUser.get();
+        if (session != null && session.getId().equals(userId)) {
+            return Optional.of("No puedes eliminar tu propio usuario.");
+        }
+        if (user.getRole() == UserRole.ADMINISTRADOR && enabledAdmins() <= 1) {
+            return Optional.of("No se puede eliminar al único administrador.");
+        }
+        security().getUsers().removeIf(candidate -> userId.equals(candidate.getId()));
+        persist();
+        return Optional.empty();
+    }
+
+    private int enabledAdmins() {
+        int count = 0;
+        for (AppUser user : security().getUsers()) {
+            if (user.isEnabled() && user.getRole() == UserRole.ADMINISTRADOR) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private AppUser findUser(String username) {
+        if (username == null) {
+            return null;
+        }
+        String needle = username.strip().toLowerCase(Locale.ROOT);
+        if (needle.isEmpty()) {
+            return null;
+        }
+        for (AppUser user : security().getUsers()) {
+            if (user.getUsername() != null && user.getUsername().strip().toLowerCase(Locale.ROOT).equals(needle)) {
+                return user;
+            }
+        }
+        return null;
+    }
+
+    private AppUser findUserById(String id) {
+        if (id == null) {
+            return null;
+        }
+        for (AppUser user : security().getUsers()) {
+            if (id.equals(user.getId())) {
+                return user;
+            }
+        }
+        return null;
+    }
+
+    private void recordAccess(String username, boolean success, String detail) {
+        SecurityConfig sec = security();
+        List<AccessLogEntry> log = sec.getAccessLog();
+        log.add(0, new AccessLogEntry(username, success, detail));
+        while (log.size() > SecurityConfig.MAX_ACCESS_LOG) {
+            log.remove(log.size() - 1);
+        }
         persist();
     }
 

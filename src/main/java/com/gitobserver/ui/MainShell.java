@@ -3,6 +3,8 @@ package com.gitobserver.ui;
 import com.gitobserver.AppContext;
 import com.gitobserver.AppInfo;
 import com.gitobserver.model.Account;
+import com.gitobserver.model.AppUser;
+import com.gitobserver.security.Permission;
 import com.gitobserver.update.UpdateService;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -35,10 +37,15 @@ public final class MainShell implements Navigator {
     private final ActivityView activity;
     private final SeguimientoView followUp;
     private final SettingsView settings;
+    private final UsersView users;
+    private final AuditView audit;
     private final CreditsView credits;
     private final Button versionButton;
+    private final Label sessionLabel = new Label();
+    private final Button changePasswordButton = new Button("Cambiar contraseña");
     private boolean updatingCombo;
     private Runnable onLock;
+    private String currentPage = Pages.HOME;
 
     public MainShell(AppContext context) {
         this(context, null);
@@ -53,6 +60,8 @@ public final class MainShell implements Navigator {
         this.activity = new ActivityView(context);
         this.followUp = new SeguimientoView(context);
         this.settings = new SettingsView(context);
+        this.users = new UsersView(context);
+        this.audit = new AuditView(context);
         this.credits = new CreditsView(context);
         this.versionButton = new Button("Versión " + AppInfo.VERSION);
         buildSidebar();
@@ -64,10 +73,15 @@ public final class MainShell implements Navigator {
         register(Pages.ACTIVITY, activity.root());
         register(Pages.FOLLOW_UP, followUp.root());
         register(Pages.SETTINGS, settings.root());
+        register(Pages.USERS, users.root());
+        register(Pages.AUDIT, audit.root());
         register(Pages.CREDITS, credits.root());
         root.setCenter(stack);
         root.getStyleClass().add("app-root");
+        context.securityEnabledProperty().addListener((obs, oldValue, newValue) -> refreshAccess());
+        context.currentUserProperty().addListener((obs, oldValue, newValue) -> refreshAccess());
         showPage(Pages.HOME);
+        refreshAccess();
         checkUpdatesAsync();
     }
 
@@ -81,6 +95,10 @@ public final class MainShell implements Navigator {
 
     @Override
     public void showPage(String pageId) {
+        if (!context.canAccessPage(pageId)) {
+            pageId = Pages.HOME;
+        }
+        currentPage = pageId;
         for (Node node : stack.getChildren()) {
             boolean active = pageId.equals(node.getUserData());
             node.setVisible(active);
@@ -103,9 +121,45 @@ public final class MainShell implements Navigator {
             case Pages.CONTRIBUTIONS -> contributors.onShow();
             case Pages.ACTIVITY -> activity.onShow();
             case Pages.FOLLOW_UP -> followUp.onShow();
+            case Pages.USERS -> users.onShow();
+            case Pages.AUDIT -> audit.onShow();
             default -> {
             }
         }
+    }
+
+    public void refreshAccess() {
+        VBox sidebar = (VBox) root.getLeft();
+        if (sidebar != null) {
+            for (Node node : sidebar.getChildren()) {
+                if (node instanceof Button button && button.getUserData() instanceof String pageId) {
+                    boolean allowed = context.canAccessPage(pageId);
+                    button.setVisible(allowed);
+                    button.setManaged(allowed);
+                }
+            }
+        }
+        updateSessionLabel();
+        boolean canChangePassword = context.isSecurityEnabled() && context.hasPermission(Permission.CHANGE_OWN_PASSWORD);
+        changePasswordButton.setVisible(canChangePassword);
+        changePasswordButton.setManaged(canChangePassword);
+        if (!context.canAccessPage(currentPage)) {
+            showPage(Pages.HOME);
+        }
+    }
+
+    private void updateSessionLabel() {
+        if (!context.isSecurityEnabled()) {
+            sessionLabel.setText("");
+            return;
+        }
+        AppUser user = context.currentUser();
+        if (user == null) {
+            sessionLabel.setText("");
+            return;
+        }
+        String role = user.getRole() == null ? "" : user.getRole().getDisplayName();
+        sessionLabel.setText(user.getUsername() + " · " + role);
     }
 
     private void buildSidebar() {
@@ -140,13 +194,14 @@ public final class MainShell implements Navigator {
         versionButton.setAlignment(Pos.CENTER_LEFT);
         versionButton.setOnAction(event -> showPage(Pages.CREDITS));
 
-        Button lockButton = new Button("Bloquear aplicación");
+        Button lockButton = new Button("Cerrar sesión");
         lockButton.getStyleClass().add("nav-button");
         lockButton.setMaxWidth(Double.MAX_VALUE);
         lockButton.setAlignment(Pos.CENTER_LEFT);
         lockButton.visibleProperty().bind(context.securityEnabledProperty());
         lockButton.managedProperty().bind(context.securityEnabledProperty());
         lockButton.setOnAction(event -> {
+            context.logout();
             if (onLock != null) {
                 onLock.run();
             }
@@ -161,6 +216,8 @@ public final class MainShell implements Navigator {
                 navButton("Actividad", Pages.ACTIVITY),
                 navButton("Seguimiento", Pages.FOLLOW_UP),
                 navButton("Configuración", Pages.SETTINGS),
+                navButton("Usuarios", Pages.USERS),
+                navButton("Auditoría", Pages.AUDIT),
                 spacer,
                 lockButton,
                 versionButton
@@ -253,9 +310,15 @@ public final class MainShell implements Navigator {
 
         Label accountLabel = new Label("Cuenta");
         accountLabel.getStyleClass().add("field-label");
+        sessionLabel.getStyleClass().add("muted");
+        changePasswordButton.getStyleClass().add("secondary");
+        changePasswordButton.setOnAction(event -> {
+            ChangePasswordDialog dialog = new ChangePasswordDialog(root.getScene() == null ? null : root.getScene().getWindow(), context);
+            dialog.showAndWait();
+        });
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox header = new HBox(titles, spacer, accountLabel, accounts);
+        HBox header = new HBox(12, titles, spacer, sessionLabel, changePasswordButton, accountLabel, accounts);
         header.setAlignment(Pos.CENTER_LEFT);
         header.getStyleClass().add("top-bar");
         root.setTop(header);
@@ -294,6 +357,8 @@ public final class MainShell implements Navigator {
             case Pages.ACTIVITY -> "Actividad";
             case Pages.FOLLOW_UP -> "Seguimiento";
             case Pages.SETTINGS -> "Configuración";
+            case Pages.USERS -> "Usuarios";
+            case Pages.AUDIT -> "Auditoría";
             case Pages.CREDITS -> "Créditos";
             default -> "Inicio";
         };
@@ -305,7 +370,9 @@ public final class MainShell implements Navigator {
             case Pages.CONTRIBUTIONS -> "Commits, líneas y archivos que cambió cada colaborador.";
             case Pages.ACTIVITY -> "Quién subió cambios en una fecha y hora, con archivos y diff.";
             case Pages.FOLLOW_UP -> "Issues, comentarios y revisiones para uno o varios repositorios.";
-            case Pages.SETTINGS -> "Tokens de acceso para una o varias cuentas de GitHub.";
+            case Pages.SETTINGS -> "Tokens de acceso, base de datos y parámetros de seguridad.";
+            case Pages.USERS -> "Alta de usuarios locales y asignación de roles de negocio.";
+            case Pages.AUDIT -> "Historial de accesos e intentos fallidos, con fecha, hora y usuario.";
             case Pages.CREDITS -> "Autor, versión y componentes de la aplicación.";
             default -> "Repositorios que la cuenta activa puede ver.";
         };
